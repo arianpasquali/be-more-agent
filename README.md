@@ -22,10 +22,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 cp .env.example .env
 # fill in ORQ_API_KEY (and ORQ_AGENT_KEY if not bmo_demo)
 
-./setup.sh                                    # Pi only — installs system deps + Piper
-uv sync --extra dev                           # local laptop dev
+./setup.sh                                    # auto: setup-pi.sh on Linux/Pi, setup-mac.sh on macOS
+# or call directly: ./setup-pi.sh / ./setup-mac.sh
 uv run python scripts/bootstrap_agent.py      # creates/updates the orq agent
-uv run bmo                                    # runs the listener
+uv run bmo                                    # Pi only — runs the booth listener
 ```
 
 ## Architecture
