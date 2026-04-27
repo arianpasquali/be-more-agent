@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from functools import cached_property
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 __all__ = ["Settings", "get_settings"]
@@ -31,6 +32,14 @@ class Settings(BaseSettings):
     camera_rotation: int = 0
 
     log_level: str = "INFO"
+
+    @field_validator("mic_device_index", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: object) -> object:
+        # `.env` files can't represent None; an empty value should mean "default".
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
     @cached_property
     def vision_trigger_re(self) -> re.Pattern[str]:
