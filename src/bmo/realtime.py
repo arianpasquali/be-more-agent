@@ -197,7 +197,13 @@ async def _session_loop(
 
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
-        timeout_handle = loop.call_later(session_seconds, stop.set)
+        # Idle timeout — reset every time the visitor speaks. Session closes
+        # only after `session_seconds` of no detected speech.
+        timeout_state = {"handle": loop.call_later(session_seconds, stop.set)}
+
+        def _reset_idle_timer() -> None:
+            timeout_state["handle"].cancel()
+            timeout_state["handle"] = loop.call_later(session_seconds, stop.set)
 
         # Lazy import: scipy adds startup cost; only need it when resampling.
         resample_poly: Any = None
@@ -286,6 +292,7 @@ async def _session_loop(
                         if idle_task and not idle_task.done():
                             idle_task.cancel()
                             idle_task = None
+                        _reset_idle_timer()
                         speaking_started = False
                         face.set_state(FaceState.LISTENING)
                         # Open a new turn span (close any leftover one first).
@@ -372,14 +379,16 @@ async def _session_loop(
         try:
             await asyncio.gather(pump_mic(), pump_events())
         finally:
-            timeout_handle.cancel()
+            timeout_state["handle"].cancel()
             in_stream.stop()
             in_stream.close()
             with contextlib.suppress(Exception):
                 out_stdin.close()
+            face.set_state(FaceState.IDLE)
             with contextlib.suppress(Exception):
                 session_span.set_attribute("bmo.turns", turn_count)
                 session_span.end()
+            log.info("realtime session closed (%d turns)", turn_count)
             try:
                 out_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
@@ -388,7 +397,12 @@ async def _session_loop(
 
 
 def run_realtime_session(
-    settings: Settings, face: FacePlayer, session_seconds: float = 60.0
+    settings: Settings, face: FacePlayer, session_seconds: float = 90.0
 ) -> None:
-    """Blocking entrypoint — runs one Realtime session for session_seconds."""
+    """Blocking entrypoint — runs one Realtime session.
+
+    `session_seconds` is the IDLE timeout: the session closes after that
+    many seconds with no detected speech. Each speech_started event resets
+    the timer so active conversations keep going.
+    """
     asyncio.run(_session_loop(settings, face, session_seconds))
