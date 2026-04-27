@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 __all__ = ["FacePlayer", "FaceState", "valid_transition"]
 
 
-class FaceState(str, Enum):
+class FaceState(StrEnum):
     IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"
