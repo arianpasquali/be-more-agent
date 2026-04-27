@@ -173,8 +173,23 @@ def run() -> None:
                 face=face,
             )
 
+    # If no display (headless / SSH without X), skip the Tk fullscreen face
+    # GUI and run the loop on the main thread. set_state() is a no-op visually
+    # but the rest of the pipeline works.
+    import os
+
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    if not has_display:
+        log.warning("no DISPLAY — running headless (face GUI disabled)")
+        loop()
+        return
+
     threading.Thread(target=loop, daemon=True).start()
-    face.run()
+    try:
+        face.run()
+    except Exception:
+        log.exception("face GUI failed; falling back to headless loop")
+        loop()
 
 
 if __name__ == "__main__":
