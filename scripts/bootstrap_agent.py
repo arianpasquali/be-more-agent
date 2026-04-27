@@ -20,6 +20,8 @@ import os
 import sys
 from pathlib import Path
 
+import orq_ai_sdk
+
 AGENT_JSON = Path(__file__).parent.parent / "orq" / "agent.json"
 
 
@@ -53,7 +55,7 @@ def main() -> int:
     existing = None
     try:
         existing = sdk.agents.retrieve(agent_key=key)
-    except Exception as exc:
+    except orq_ai_sdk.APIError as exc:
         err_str = str(exc).lower()
         # 404 / not found means we need to create
         if "404" in err_str or "not found" in err_str or "notfound" in err_str:

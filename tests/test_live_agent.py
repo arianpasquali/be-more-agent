@@ -15,3 +15,4 @@ def test_live_text_invoke():
     out = c.invoke("Say hi in one short sentence.")
     assert out
     assert len(out) < 300
+    print(out)

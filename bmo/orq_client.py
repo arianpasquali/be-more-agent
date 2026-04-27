@@ -62,12 +62,6 @@ class OrqClient:
                     text = getattr(part, "text", None)
                     if text:
                         return text
-                # Fallback: some SDK versions use .actual_instance wrapping
-                actual = getattr(part, "actual_instance", None)
-                if actual is not None:
-                    text = getattr(actual, "text", None)
-                    if text:
-                        return text
         return ""
 
     def reset_thread(self) -> None:
