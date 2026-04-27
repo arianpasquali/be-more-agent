@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 __all__ = ["FacePlayer", "FaceState", "valid_transition"]
 
 
-class FaceState(str, Enum):  # noqa: UP042
+class FaceState(str, Enum):
     IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"

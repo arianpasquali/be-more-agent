@@ -83,4 +83,3 @@ skip_covered = false
 # so we skip building it from source when not on Linux.
 [tool.uv]
 no-build-package = ["python-prctl"]
-
