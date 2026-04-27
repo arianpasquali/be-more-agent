@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
@@ -113,11 +116,38 @@ async def _session_loop(
         )
         await conn.session.update(session=session_cfg)
 
-        out_stream = sd.RawOutputStream(samplerate=OUTPUT_RATE, channels=1, dtype="int16")
+        # Output: stream raw pcm16 24kHz mono to ffplay's stdin so playback
+        # routes through PulseAudio/PipeWire (= the user's selected default
+        # sink, including Bluetooth headsets). sounddevice would talk to ALSA
+        # directly and ignore the PulseAudio default.
+        if not shutil.which("ffplay"):
+            raise RuntimeError("ffplay not found — install ffmpeg")
+        out_proc = subprocess.Popen(
+            [
+                "ffplay",
+                "-nodisp",
+                "-autoexit",
+                "-loglevel",
+                "error",
+                "-f",
+                "s16le",
+                "-ar",
+                str(OUTPUT_RATE),
+                "-ac",
+                "1",
+                "-i",
+                "pipe:0",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        assert out_proc.stdin is not None  # type narrowing for pyright
+        out_stdin = out_proc.stdin  # local non-Optional alias
+
         in_stream = sd.RawInputStream(
             samplerate=mic_rate, channels=1, dtype="int16", device=settings.mic_device_index
         )
-        out_stream.start()
         in_stream.start()
 
         stop = asyncio.Event()
@@ -125,12 +155,11 @@ async def _session_loop(
         timeout_handle = loop.call_later(session_seconds, stop.set)
 
         # Lazy import: scipy adds startup cost; only need it when resampling.
+        resample_poly: Any = None
         if mic_rate != INPUT_RATE:
-            from scipy.signal import (
-                resample_poly,  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
-            )
-        else:
-            resample_poly = None  # pyright: ignore[reportConstantRedefinition]
+            from scipy.signal import resample_poly as _rp  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]  # noqa: I001
+
+            resample_poly = cast(Any, _rp)
 
         import numpy as np
 
@@ -145,7 +174,7 @@ async def _session_loop(
                     if resample_poly is not None:
                         arr = np.frombuffer(pcm, dtype=np.int16)
                         resampled = resample_poly(arr, INPUT_RATE, mic_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-                        clipped = cast(Any, np.clip(resampled, -32768, 32767))
+                        clipped: Any = np.clip(resampled, -32768, 32767)
                         pcm = clipped.astype(np.int16).tobytes()
                     await conn.input_audio_buffer.append(audio=base64.b64encode(pcm).decode())
             except Exception:
@@ -156,19 +185,28 @@ async def _session_loop(
             try:
                 async for event in conn:
                     etype = getattr(event, "type", "")
-                    if etype == "response.audio.delta":
+                    if etype in ("response.audio.delta", "response.output_audio.delta"):
                         audio_b64 = getattr(event, "delta", "")
                         if audio_b64:
-                            out_stream.write(base64.b64decode(audio_b64))  # pyright: ignore[reportUnknownMemberType]
+                            try:
+                                out_stdin.write(base64.b64decode(audio_b64))
+                                out_stdin.flush()
+                            except BrokenPipeError:
+                                log.warning("ffplay pipe closed")
+                                stop.set()
+                                return
                     elif etype == "input_audio_buffer.speech_started":
                         face.set_state(FaceState.LISTENING)
                     elif etype == "input_audio_buffer.speech_stopped":
                         face.set_state(FaceState.THINKING)
-                    elif etype == "response.audio.done":
+                    elif etype in ("response.audio.done", "response.output_audio.done"):
                         face.set_state(FaceState.IDLE)
                     elif etype == "response.created":
                         face.set_state(FaceState.SPEAKING)
-                    elif etype == "response.audio_transcript.done":
+                    elif etype in (
+                        "response.audio_transcript.done",
+                        "response.output_audio_transcript.done",
+                    ):
                         log.info("bmo said: %r", getattr(event, "transcript", ""))
                     elif etype == "conversation.item.input_audio_transcription.completed":
                         log.info("heard: %r", getattr(event, "transcript", ""))
@@ -188,8 +226,12 @@ async def _session_loop(
             timeout_handle.cancel()
             in_stream.stop()
             in_stream.close()
-            out_stream.stop()
-            out_stream.close()
+            with contextlib.suppress(Exception):
+                out_stdin.close()
+            try:
+                out_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                out_proc.kill()
             log.info("realtime session closed")
 
 
