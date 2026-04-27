@@ -1,4 +1,5 @@
 """Centralized logging setup for bmo."""
+
 from __future__ import annotations
 
 import logging
