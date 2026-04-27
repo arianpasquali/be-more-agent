@@ -8,7 +8,7 @@ SDK adaptation note:
     Therefore, production STT is implemented via a plain httpx.Client that
     POSTs multipart/form-data to the orq AI Router transcription endpoint:
 
-        POST https://api.orq.ai/v1/audio/transcriptions
+        POST https://api.orq.ai/v3/router/audio/transcriptions
         Authorization: Bearer <api_key>
         Content-Type: multipart/form-data
         Body fields: file (WAV bytes), model (str)
@@ -26,7 +26,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-ORQ_TRANSCRIPTION_URL = "https://api.orq.ai/v1/audio/transcriptions"
+ORQ_TRANSCRIPTION_URL = "https://api.orq.ai/v3/router/audio/transcriptions"
 
 
 def _audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:

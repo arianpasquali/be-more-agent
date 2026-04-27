@@ -16,5 +16,5 @@ def test_transcribe_returns_text():
 
     # Verify the call was made with correct endpoint and model
     call_kwargs = fake_client.post.call_args
-    assert "audio/transcriptions" in call_kwargs[0][0]
+    assert call_kwargs[0][0] == "https://api.orq.ai/v3/router/audio/transcriptions"
     assert call_kwargs[1]["data"]["model"] == "openai/whisper-1"

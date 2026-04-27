@@ -98,7 +98,7 @@ def run() -> None:
                             sample_rate=settings.sample_rate,
                             device=settings.mic_device_index,
                         ),
-                        stt_fn=lambda audio: transcribe(audio, settings.sample_rate, http_client),
+                        stt_fn=lambda audio: transcribe(audio, settings.sample_rate, http_client, model=settings.orq_stt_model),
                         orq_client=orq_client,
                         tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
                         camera=camera,

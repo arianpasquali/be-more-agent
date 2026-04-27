@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     orq_agent_key: str
     orq_model: str = "openai/gpt-4o"
     orq_vision_model: str = "openai/gpt-4o"
+    orq_stt_model: str = "openai/whisper-1"
     orq_workspace_url: str = "https://my.orq.ai"
 
     mic_device_index: int | None = None

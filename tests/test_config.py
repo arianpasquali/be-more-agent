@@ -22,6 +22,13 @@ def test_missing_api_key_raises(monkeypatch, tmp_path):
         Settings()
 
 
+def test_orq_stt_model_default(monkeypatch):
+    monkeypatch.setenv("ORQ_API_KEY", "sk-test")
+    monkeypatch.setenv("ORQ_AGENT_KEY", "bmo_demo")
+    s = Settings()
+    assert s.orq_stt_model == "openai/whisper-1"
+
+
 def test_vision_trigger_compiles(monkeypatch):
     monkeypatch.setenv("ORQ_API_KEY", "sk-test")
     monkeypatch.setenv("ORQ_AGENT_KEY", "bmo_demo")
