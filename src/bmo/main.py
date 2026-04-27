@@ -113,34 +113,41 @@ def run() -> None:
 
         log.info("listening for wakeword (native %dHz, wake %dHz)...", native_rate, wake_rate)
         face.set_state(FaceState.IDLE)
-        with sd.InputStream(
-            samplerate=native_rate,
-            channels=1,
-            device=settings.mic_device_index,
-            dtype="int16",
-        ) as stream:
-            while True:
-                data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
-                mono: np.ndarray = data[:, 0]
-                if native_rate != wake_rate:
-                    resampled = resample_poly(mono, wake_rate, native_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-                    mono = np.asarray(resampled, dtype=np.int16)
-                if wake.detect(mono):
-                    log.info("wakeword detected")
-                    handle_one_utterance(
-                        settings=settings,
-                        record_fn=lambda: record_until_silence(
-                            sample_rate=native_rate,
-                            device=settings.mic_device_index,
-                        ),
-                        stt_fn=lambda audio: transcribe(
-                            audio, native_rate, http_client, model=settings.orq_stt_model
-                        ),
-                        orq_client=orq_client,
-                        tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
-                        camera=camera,
-                        face=face,
-                    )
+
+        def wait_for_wakeword() -> None:
+            with sd.InputStream(
+                samplerate=native_rate,
+                channels=1,
+                device=settings.mic_device_index,
+                dtype="int16",
+            ) as stream:
+                while True:
+                    data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
+                    mono: np.ndarray = data[:, 0]
+                    if native_rate != wake_rate:
+                        resampled = resample_poly(mono, wake_rate, native_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
+                        mono = np.asarray(resampled, dtype=np.int16)
+                    if wake.detect(mono):
+                        return
+
+        while True:
+            wait_for_wakeword()
+            log.info("wakeword detected")
+            # Wakeword stream is closed here — mic is free for record_until_silence.
+            handle_one_utterance(
+                settings=settings,
+                record_fn=lambda: record_until_silence(
+                    sample_rate=native_rate,
+                    device=settings.mic_device_index,
+                ),
+                stt_fn=lambda audio: transcribe(
+                    audio, native_rate, http_client, model=settings.orq_stt_model
+                ),
+                orq_client=orq_client,
+                tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
+                camera=camera,
+                face=face,
+            )
 
     threading.Thread(target=loop, daemon=True).start()
     face.run()
