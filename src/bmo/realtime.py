@@ -210,27 +210,42 @@ async def _session_loop(
                 stop.set()
 
         async def pump_events() -> None:
+            speaking_started = False  # per-response flag — SPEAKING only on first delta
             try:
                 async for event in conn:
                     etype = getattr(event, "type", "")
+
                     if etype in ("response.audio.delta", "response.output_audio.delta"):
                         audio_b64 = getattr(event, "delta", "")
                         if audio_b64:
+                            if not speaking_started:
+                                speaking_started = True
+                                face.set_state(FaceState.SPEAKING)
                             try:
                                 out_stdin.write(base64.b64decode(audio_b64))
                                 out_stdin.flush()
                             except BrokenPipeError:
-                                log.warning("ffplay pipe closed")
+                                log.warning("audio player pipe closed")
                                 stop.set()
                                 return
                     elif etype == "input_audio_buffer.speech_started":
+                        # Visitor started talking — covers both initial speech and
+                        # barge-in (cancels any in-progress reply server-side).
+                        speaking_started = False
                         face.set_state(FaceState.LISTENING)
                     elif etype == "input_audio_buffer.speech_stopped":
                         face.set_state(FaceState.THINKING)
-                    elif etype in ("response.audio.done", "response.output_audio.done"):
-                        face.set_state(FaceState.IDLE)
                     elif etype == "response.created":
-                        face.set_state(FaceState.SPEAKING)
+                        # Model accepted the turn but audio hasn't streamed yet —
+                        # keep showing THINKING until first audio delta lands.
+                        speaking_started = False
+                    elif etype in (
+                        "response.audio.done",
+                        "response.output_audio.done",
+                        "response.done",
+                    ):
+                        speaking_started = False
+                        face.set_state(FaceState.IDLE)
                     elif etype in (
                         "response.audio_transcript.done",
                         "response.output_audio_transcript.done",
@@ -240,12 +255,15 @@ async def _session_loop(
                         log.info("heard: %r", getattr(event, "transcript", ""))
                     elif etype == "error":
                         log.error("realtime error: %s", getattr(event, "error", event))
+                        face.set_state(FaceState.ERROR)
                         stop.set()
                         return
+
                     if stop.is_set():
                         return
             except Exception:
                 log.exception("event pump failed")
+                face.set_state(FaceState.ERROR)
                 stop.set()
 
         try:
