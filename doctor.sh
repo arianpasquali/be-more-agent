@@ -127,10 +127,12 @@ fi
 # --- linux/Pi-only checks ---
 if [ "$PLATFORM" = "Linux" ]; then
   section "Pi audio"
-  if ldconfig -p 2>/dev/null | grep -q libportaudio; then
+  if /sbin/ldconfig -p 2>/dev/null | grep -q libportaudio \
+       || ls /usr/lib/*/libportaudio.so* >/dev/null 2>&1 \
+       || ls /usr/lib/libportaudio.so* >/dev/null 2>&1; then
     ok "libportaudio2 system lib"
   else
-    fail "libportaudio2 missing (run: sudo apt install libportaudio2 portaudio19-dev)"
+    warn "libportaudio2 not found in standard paths (sounddevice import above is the real test)"
   fi
 
   if command -v piper >/dev/null 2>&1; then
@@ -164,15 +166,19 @@ if [ "$PLATFORM" = "Linux" ]; then
     fail "no audio input devices (plug a USB mic; check ALSA)"
   fi
 
-  # camera
-  if command -v libcamera-hello >/dev/null 2>&1; then
-    if libcamera-hello --list-cameras 2>/dev/null | grep -qi 'available cameras'; then
-      ok "Pi camera detected (libcamera)"
+  # camera (Bookworm renamed libcamera-hello → rpicam-hello)
+  CAM_CMD=""
+  for c in rpicam-hello libcamera-hello; do
+    if command -v "$c" >/dev/null 2>&1; then CAM_CMD="$c"; break; fi
+  done
+  if [ -n "$CAM_CMD" ]; then
+    if "$CAM_CMD" --list-cameras 2>/dev/null | grep -qiE 'available cameras|^\s*[0-9]+\s*:'; then
+      ok "Pi camera detected ($CAM_CMD)"
     else
-      warn "libcamera installed but no camera reported (vision will be skipped)"
+      warn "$CAM_CMD installed but no camera reported (vision will be skipped)"
     fi
   else
-    warn "libcamera-hello not present (vision will be skipped)"
+    warn "rpicam-hello/libcamera-hello not present (vision will be skipped)"
   fi
 
   # face frames

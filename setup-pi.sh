@@ -24,7 +24,13 @@ sudo apt install -y \
   python3 python3-pip \
   libportaudio2 portaudio19-dev libopenblas-dev \
   espeak-ng ffmpeg git curl \
-  libcamera-apps python3-libcamera
+  python3-libcamera
+
+# Camera CLI tools — package name differs across Pi OS releases.
+# Bookworm: rpicam-apps. Bullseye: libcamera-apps. Try both, ignore failures.
+sudo apt install -y rpicam-apps 2>/dev/null \
+  || sudo apt install -y libcamera-apps 2>/dev/null \
+  || echo "[bmo-orq] warning: neither rpicam-apps nor libcamera-apps available — vision may not work"
 
 echo "[bmo-orq] installing uv…"
 if ! command -v uv >/dev/null 2>&1; then
