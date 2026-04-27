@@ -115,13 +115,17 @@ if [ -f .env ]; then
   fi
 fi
 
-# --- pre-commit (dev hygiene, not critical for booth) ---
+# --- pre-commit (dev hygiene, not relevant for Pi/production) ---
 section "dev hygiene"
-HOOK=$(git rev-parse --git-path hooks/pre-commit 2>/dev/null || echo "")
-if [ -n "$HOOK" ] && [ -f "$HOOK" ]; then
-  ok "pre-commit hook installed"
+if uv run --quiet python -c "import pre_commit" 2>/dev/null; then
+  HOOK=$(git rev-parse --git-path hooks/pre-commit 2>/dev/null || echo "")
+  if [ -n "$HOOK" ] && [ -f "$HOOK" ]; then
+    ok "pre-commit hook installed"
+  else
+    warn "pre-commit hook not installed (run: uv run pre-commit install)"
+  fi
 else
-  warn "pre-commit hook not installed (run: uv run pre-commit install)"
+  info "pre-commit not installed (only needed on dev workstations — uv sync --extra dev)"
 fi
 
 # --- linux/Pi-only checks ---
