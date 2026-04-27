@@ -1,19 +1,11 @@
-import os
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from bmo.config import Settings
 from bmo.main import handle_one_utterance
 
 
-def make_settings():
-    os.environ["ORQ_API_KEY"] = "sk-test"
-    os.environ["ORQ_AGENT_KEY"] = "bmo_demo"
-    return Settings()
-
-
-def test_handle_text_only():
+def test_handle_text_only(make_settings):
     settings = make_settings()
     audio = np.zeros(16000, dtype=np.float32)
 
@@ -40,7 +32,7 @@ def test_handle_text_only():
     fake_camera.capture.assert_not_called()
 
 
-def test_handle_vision_trigger_captures():
+def test_handle_vision_trigger_captures(make_settings):
     settings = make_settings()
     audio = np.zeros(16000, dtype=np.float32)
 

@@ -3,16 +3,6 @@ from unittest.mock import MagicMock
 from bmo.orq_client import OrqClient
 
 
-def make_settings():
-    import os
-
-    from bmo.config import Settings
-
-    os.environ["ORQ_API_KEY"] = "sk-test"
-    os.environ["ORQ_AGENT_KEY"] = "bmo_demo"
-    return Settings()
-
-
 def make_text_part(text: str) -> MagicMock:
     """Create a fake A2A TextPart with kind='text'."""
     part = MagicMock()
@@ -32,7 +22,7 @@ def make_response(text: str) -> MagicMock:
     return resp
 
 
-def test_invoke_text_only(monkeypatch):
+def test_invoke_text_only(make_settings):
     fake_resp = make_response("Hello visitor!")
     fake_sdk = MagicMock()
     fake_sdk.agents.responses.create.return_value = fake_resp
@@ -50,7 +40,7 @@ def test_invoke_text_only(monkeypatch):
     assert parts[0]["text"] == "hello"
 
 
-def test_invoke_with_image(monkeypatch):
+def test_invoke_with_image(make_settings):
     fake_resp = make_response("I see a desk.")
     fake_sdk = MagicMock()
     fake_sdk.agents.responses.create.return_value = fake_resp
