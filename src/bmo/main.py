@@ -11,6 +11,7 @@ import numpy as np
 from bmo.audio_io import play_tts, record_until_silence
 from bmo.config import Settings, get_settings
 from bmo.faces import FacePlayer, FaceState
+from bmo.logging import setup as setup_logging
 from bmo.orq_client import OrqClient
 from bmo.stt import transcribe
 from bmo.vision import capture_b64
@@ -64,7 +65,7 @@ def handle_one_utterance(
 
 def run() -> None:
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level)
+    setup_logging(settings.log_level)
 
     orq_client = OrqClient(settings=settings)
 
