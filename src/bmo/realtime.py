@@ -28,6 +28,7 @@ from openai import AsyncOpenAI
 
 from bmo.config import Settings
 from bmo.faces import FacePlayer, FaceState
+from bmo.orq_client import OrqClient
 
 __all__ = ["run_realtime_session"]
 
@@ -62,12 +63,12 @@ async def _session_loop(
     # sounddevice ships no type stubs
     import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
-    # NOTE: realtime mode does not produce orq traces. orq's trace UI only
-    # surfaces spans from their own products (router/agents/deployments);
-    # standalone OTel and @traced calls land at the collector but are not
-    # visible. Use BMO_MODE=orq for the observable demo path.
-
+    # Realtime audio runs on OpenAI direct (orq doesn't proxy WebSocket).
+    # For trace visibility we shadow each turn through the orq agent: the
+    # transcripts get sent as a regular invoke after the audio reply ends,
+    # creating a real router-product trace in the workspace dashboard.
     client = AsyncOpenAI(api_key=settings.openai_api_key)
+    shadow_orq = OrqClient(settings=settings)
     instructions = _load_orq_instructions()
 
     log.info(
@@ -227,12 +228,38 @@ async def _session_loop(
         # to cover paplay's --latency-msec buffer + BT sink jitter.
         playback_tail_padding_s = 0.4
 
+        async def _shadow_log(user_text: str, bmo_text: str) -> None:
+            """Send the turn through the orq agent so it shows up in Traces.
+            We discard the agent's reply; this is a fire-and-forget sidecar.
+            """
+            if not user_text and not bmo_text:
+                return
+            payload = (
+                f"[realtime turn — for tracing only]\n"
+                f"User said: {user_text}\n"
+                f"BMO replied: {bmo_text}\n"
+                f"Acknowledge briefly."
+            )
+            try:
+                await asyncio.to_thread(shadow_orq.invoke, payload)
+            except Exception:
+                log.exception("shadow trace log failed")
+
         async def pump_events() -> None:
             nonlocal turn_count
             speaking_started = False
             response_bytes = 0
             response_started_at = 0.0
             idle_task: asyncio.Task[None] | None = None
+            user_text_buf = ""
+            bmo_text_buf = ""
+            shadow_tasks: set[asyncio.Task[None]] = set()
+
+            def _spawn_shadow(u: str, b: str) -> None:
+                # Keep a strong reference so asyncio doesn't GC the task.
+                t = asyncio.create_task(_shadow_log(u, b))
+                shadow_tasks.add(t)
+                t.add_done_callback(shadow_tasks.discard)
 
             async def _delayed_idle(delay_s: float) -> None:
                 try:
@@ -302,9 +329,18 @@ async def _session_loop(
                         "response.audio_transcript.done",
                         "response.output_audio_transcript.done",
                     ):
-                        log.info("bmo said: %r", getattr(event, "transcript", ""))
+                        bmo_text_buf = getattr(event, "transcript", "") or ""
+                        log.info("bmo said: %r", bmo_text_buf)
+                        # Fire shadow log when both halves of the turn are in.
+                        if user_text_buf:
+                            _spawn_shadow(user_text_buf, bmo_text_buf)
+                            user_text_buf, bmo_text_buf = "", ""
                     elif etype == "conversation.item.input_audio_transcription.completed":
-                        log.info("heard: %r", getattr(event, "transcript", ""))
+                        user_text_buf = getattr(event, "transcript", "") or ""
+                        log.info("heard: %r", user_text_buf)
+                        if bmo_text_buf:
+                            _spawn_shadow(user_text_buf, bmo_text_buf)
+                            user_text_buf, bmo_text_buf = "", ""
                     elif etype == "error":
                         log.error("realtime error: %s", getattr(event, "error", event))
                         face.set_state(FaceState.ERROR)
