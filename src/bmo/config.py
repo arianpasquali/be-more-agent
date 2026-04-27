@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     orq_api_key: str
     orq_agent_key: str
     orq_model: str = "openai/gpt-4o"
+
+    # Realtime mode (BMO_MODE=realtime). orq doesn't proxy WebSocket Realtime,
+    # so we go direct to OpenAI for the speech-to-speech path.
+    bmo_mode: str = "orq"
+    openai_api_key: str | None = None
+    openai_realtime_model: str = "gpt-4o-realtime-preview"
+    openai_realtime_voice: str = "alloy"
     orq_vision_model: str = "openai/gpt-4o"
     orq_stt_model: str = "openai/whisper-1"
     orq_tts_model: str = "openai/tts-1"
