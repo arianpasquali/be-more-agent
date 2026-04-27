@@ -39,6 +39,7 @@ def handle_one_utterance(
 
     face.set_state(FaceState.THINKING)
     text = stt_fn(audio).strip()
+    log.info("heard: %r", text)
     if not text:
         log.info("empty transcript, skipping")
         face.set_state(FaceState.IDLE)
