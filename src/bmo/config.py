@@ -16,12 +16,12 @@ class Settings(BaseSettings):
     orq_model: str = "openai/gpt-4o"
     orq_vision_model: str = "openai/gpt-4o"
     orq_stt_model: str = "openai/whisper-1"
+    orq_tts_model: str = "openai/tts-1"
+    orq_tts_voice: str = "alloy"
     orq_workspace_url: str = "https://my.orq.ai"
 
     mic_device_index: int | None = None
     sample_rate: int = 16000
-    piper_voice: str = "voices/bmo.onnx"
-    piper_rate: int = 22050
 
     wakeword_path: str = "wakeword.onnx"
     wakeword_threshold: float = 0.5

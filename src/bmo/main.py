@@ -8,12 +8,13 @@ from typing import Any
 import httpx
 import numpy as np
 
-from bmo.audio_io import play_tts, record_until_silence
+from bmo.audio_io import play_audio_bytes, record_until_silence
 from bmo.config import Settings, get_settings
 from bmo.faces import FacePlayer, FaceState
 from bmo.logging import setup as setup_logging
 from bmo.orq_client import OrqClient
 from bmo.stt import transcribe
+from bmo.tts import synthesize
 from bmo.vision import capture_b64
 from bmo.wakeword import WakeWordDetector
 
@@ -144,7 +145,11 @@ def run() -> None:
                     audio, native_rate, http_client, model=settings.orq_stt_model
                 ),
                 orq_client=orq_client,
-                tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
+                tts_fn=lambda txt: play_audio_bytes(
+                    synthesize(
+                        txt, http_client, model=settings.orq_tts_model, voice=settings.orq_tts_voice
+                    )
+                ),
                 camera=camera,
                 face=face,
             )
