@@ -9,6 +9,7 @@
 
 - [`superpowers/specs/2026-04-27-bmo-orq-design.md`](superpowers/specs/2026-04-27-bmo-orq-design.md) — original v0.1 design spec.
 - [`superpowers/specs/2026-04-27-modernize-tooling-design.md`](superpowers/specs/2026-04-27-modernize-tooling-design.md) — v0.2 tooling refactor spec.
+- [`superpowers/specs/2026-04-28-realtime-design.md`](superpowers/specs/2026-04-28-realtime-design.md) — v0.3 Realtime mode architecture (OpenAI Realtime API, shadow traces, paplay, headless).
 
 ## Plans
 
