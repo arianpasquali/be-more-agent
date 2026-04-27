@@ -24,6 +24,7 @@ cp .env.example .env
 
 ./setup.sh                                    # auto: setup-pi.sh on Linux/Pi, setup-mac.sh on macOS
 # or call directly: ./setup-pi.sh / ./setup-mac.sh
+./doctor.sh                                   # check everything is wired up
 uv run python scripts/bootstrap_agent.py      # creates/updates the orq agent
 uv run bmo                                    # Pi only — runs the booth listener
 ```
