@@ -6,48 +6,67 @@ import subprocess
 
 import numpy as np
 
+from bmo.vad import VAD_CHUNK_SAMPLES, VAD_SAMPLE_RATE, SileroVAD
+
 log = logging.getLogger(__name__)
 
-SILENCE_RMS = 0.02
+# Silero VAD speech-probability threshold and run lengths (in 32 ms chunks).
+VAD_SPEECH_THRESHOLD = 0.5
+VAD_START_CHUNKS = 3  # ~96 ms above threshold to consider speech started
+VAD_END_CHUNKS = 25  # ~800 ms below threshold to consider utterance ended
 
-__all__ = ["SILENCE_RMS", "play_audio_bytes", "record_until_silence"]
+__all__ = [
+    "VAD_END_CHUNKS",
+    "VAD_SPEECH_THRESHOLD",
+    "VAD_START_CHUNKS",
+    "play_audio_bytes",
+    "record_until_silence",
+]
 
 
-def _rms(chunk: np.ndarray) -> float:
-    return float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
+def _resample_to_vad(chunk: np.ndarray, src_rate: int) -> np.ndarray:
+    """Downsample a recording chunk to 16 kHz mono float32 for the VAD."""
+    if src_rate == VAD_SAMPLE_RATE:
+        return chunk.astype(np.float32, copy=False)
+    # scipy.signal lacks type stubs; cast away pyright noise locally.
+    from scipy.signal import resample_poly  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]  # noqa: I001
+
+    out = resample_poly(chunk, VAD_SAMPLE_RATE, src_rate)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    return np.asarray(out, dtype=np.float32)
 
 
 def record_until_silence(
     sample_rate: int = 16000,
-    max_seconds: float = 10.0,
-    silence_seconds: float = 1.2,
-    initial_wait_seconds: float = 5.0,
+    max_seconds: float = 12.0,
+    initial_wait_seconds: float = 6.0,
     device: int | None = None,
-    chunk_ms: int = 100,
 ) -> np.ndarray:
-    """Block-record from mic until trailing silence or max_seconds.
+    """Record from mic until Silero VAD detects end-of-utterance.
 
-    Two-phase recording:
-      1. Wait up to initial_wait_seconds for ANY chunk above SILENCE_RMS
-         (i.e. user starts speaking). Discard leading silence.
-      2. Once speech detected, keep recording until silence_seconds of
-         continuous silence OR total max_seconds reached.
+    Two-phase:
+      1. Wait up to initial_wait_seconds for the first chunk-run above
+         the VAD speech threshold.
+      2. Capture audio until VAD reports VAD_END_CHUNKS of trailing silence
+         OR total max_seconds reached.
 
-    This avoids capturing only the gap between wakeword and the first
-    word, which was producing empty / "." Whisper transcripts.
+    Returns float32 audio at the input device's native sample rate (caller
+    passes that rate forward to STT). VAD itself runs on a 16 kHz copy.
     """
-    chunk_n = int(sample_rate * chunk_ms / 1000)
-    silence_chunks_needed = int(silence_seconds * 1000 / chunk_ms)
-    max_chunks = int(max_seconds * 1000 / chunk_ms)
-    initial_wait_chunks = int(initial_wait_seconds * 1000 / chunk_ms)
-
     # sounddevice ships no type stubs; ignore the stub-not-found diagnostic
     import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
+    vad = SileroVAD()
+    # Native input chunk size that corresponds to one 16 kHz VAD chunk.
+    chunk_n = int(VAD_CHUNK_SAMPLES * sample_rate / VAD_SAMPLE_RATE)
+    chunk_seconds = VAD_CHUNK_SAMPLES / VAD_SAMPLE_RATE
+    max_chunks = int(max_seconds / chunk_seconds)
+    initial_wait_chunks = int(initial_wait_seconds / chunk_seconds)
+
     captured: list[np.ndarray] = []
-    silent_run = 0
+    speech_run = 0
+    silence_run = 0
     speech_started = False
-    peak_rms = 0.0
+    peak_prob = 0.0
 
     with sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
         samplerate=sample_rate, channels=1, device=device, dtype="float32"
@@ -55,29 +74,44 @@ def record_until_silence(
         for i in range(max_chunks):
             data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
             mono = data[:, 0]
-            level = _rms(mono)
-            peak_rms = max(peak_rms, level)
+            vad_chunk = _resample_to_vad(mono, sample_rate)
+            # Defensive: if resample produces a slightly off length, pad/trim.
+            if vad_chunk.shape[0] < VAD_CHUNK_SAMPLES:
+                vad_chunk = np.pad(vad_chunk, (0, VAD_CHUNK_SAMPLES - vad_chunk.shape[0]))
+            elif vad_chunk.shape[0] > VAD_CHUNK_SAMPLES:
+                vad_chunk = vad_chunk[:VAD_CHUNK_SAMPLES]
+
+            prob = vad.score(vad_chunk)
+            peak_prob = max(peak_prob, prob)
 
             if not speech_started:
-                if level >= SILENCE_RMS:
+                if prob >= VAD_SPEECH_THRESHOLD:
+                    speech_run += 1
+                else:
+                    speech_run = 0
+                if speech_run >= VAD_START_CHUNKS:
                     speech_started = True
                     captured.append(mono.copy())
                 elif i >= initial_wait_chunks:
                     log.info(
-                        "no speech heard within %.1fs (peak rms=%.4f)",
+                        "no speech detected within %.1fs (peak vad=%.2f)",
                         initial_wait_seconds,
-                        peak_rms,
+                        peak_prob,
                     )
                     return np.array([], dtype=np.float32)
                 continue
 
             captured.append(mono.copy())
-            silent_run = silent_run + 1 if level < SILENCE_RMS else 0
-            if silent_run >= silence_chunks_needed:
+            if prob < VAD_SPEECH_THRESHOLD:
+                silence_run += 1
+            else:
+                silence_run = 0
+            if silence_run >= VAD_END_CHUNKS:
                 break
 
     if captured:
-        log.info("captured %.1fs (peak rms=%.4f)", len(captured) * chunk_ms / 1000, peak_rms)
+        seconds = len(captured) * chunk_seconds
+        log.info("captured %.1fs (peak vad=%.2f)", seconds, peak_prob)
     return np.concatenate(captured) if captured else np.array([], dtype=np.float32)
 
 
