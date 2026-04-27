@@ -209,8 +209,31 @@ async def _session_loop(
                 log.exception("mic pump failed")
                 stop.set()
 
+        # Padding past computed playback end before flipping back to IDLE,
+        # to cover paplay's --latency-msec buffer + BT sink jitter.
+        playback_tail_padding_s = 0.4
+
         async def pump_events() -> None:
-            speaking_started = False  # per-response flag — SPEAKING only on first delta
+            speaking_started = False
+            response_bytes = 0
+            response_started_at = 0.0
+            idle_task: asyncio.Task[None] | None = None
+
+            async def _delayed_idle(delay_s: float) -> None:
+                try:
+                    await asyncio.sleep(max(0.0, delay_s))
+                    face.set_state(FaceState.IDLE)
+                except asyncio.CancelledError:
+                    pass
+
+            def _start_response() -> None:
+                nonlocal speaking_started, response_bytes, idle_task
+                speaking_started = False
+                response_bytes = 0
+                if idle_task and not idle_task.done():
+                    idle_task.cancel()
+                    idle_task = None
+
             try:
                 async for event in conn:
                     etype = getattr(event, "type", "")
@@ -220,32 +243,47 @@ async def _session_loop(
                         if audio_b64:
                             if not speaking_started:
                                 speaking_started = True
+                                response_started_at = loop.time()
                                 face.set_state(FaceState.SPEAKING)
                             try:
-                                out_stdin.write(base64.b64decode(audio_b64))
+                                pcm = base64.b64decode(audio_b64)
+                                out_stdin.write(pcm)
                                 out_stdin.flush()
+                                response_bytes += len(pcm)
                             except BrokenPipeError:
                                 log.warning("audio player pipe closed")
                                 stop.set()
                                 return
                     elif etype == "input_audio_buffer.speech_started":
-                        # Visitor started talking — covers both initial speech and
-                        # barge-in (cancels any in-progress reply server-side).
+                        # Barge-in: visitor speaking cancels in-progress audio.
+                        if idle_task and not idle_task.done():
+                            idle_task.cancel()
+                            idle_task = None
                         speaking_started = False
                         face.set_state(FaceState.LISTENING)
                     elif etype == "input_audio_buffer.speech_stopped":
                         face.set_state(FaceState.THINKING)
                     elif etype == "response.created":
-                        # Model accepted the turn but audio hasn't streamed yet —
-                        # keep showing THINKING until first audio delta lands.
+                        _start_response()
+                    elif etype in ("response.audio.done", "response.output_audio.done"):
+                        # Server is done streaming bytes; local paplay buffer
+                        # still draining. Compute expected playback end and
+                        # schedule the IDLE transition then.
+                        if speaking_started and response_bytes:
+                            play_seconds = response_bytes / 2 / OUTPUT_RATE
+                            elapsed = loop.time() - response_started_at
+                            remaining = play_seconds - elapsed + playback_tail_padding_s
+                            log.debug(
+                                "audio done: bytes=%d play=%.2fs elapsed=%.2fs idle in %.2fs",
+                                response_bytes,
+                                play_seconds,
+                                elapsed,
+                                remaining,
+                            )
+                            idle_task = asyncio.create_task(_delayed_idle(remaining))
+                        else:
+                            face.set_state(FaceState.IDLE)
                         speaking_started = False
-                    elif etype in (
-                        "response.audio.done",
-                        "response.output_audio.done",
-                        "response.done",
-                    ):
-                        speaking_started = False
-                        face.set_state(FaceState.IDLE)
                     elif etype in (
                         "response.audio_transcript.done",
                         "response.output_audio_transcript.done",
@@ -260,6 +298,8 @@ async def _session_loop(
                         return
 
                     if stop.is_set():
+                        if idle_task and not idle_task.done():
+                            idle_task.cancel()
                         return
             except Exception:
                 log.exception("event pump failed")
