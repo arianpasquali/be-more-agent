@@ -1,0 +1,30 @@
+{"inputs": {"user": "Hey BMO, what's your name?"}, "expected_output": "I'm BMO!"}
+{"inputs": {"user": "Tell me a joke."}, "expected_output": null}
+{"inputs": {"user": "What can you do?"}, "expected_output": null}
+{"inputs": {"user": "What do you see?"}, "expected_output": null}
+{"inputs": {"user": "Sing me a song."}, "expected_output": null}
+{"inputs": {"user": "Who made you?"}, "expected_output": null}
+{"inputs": {"user": "What is orq.ai?"}, "expected_output": null}
+{"inputs": {"user": "Are you alive?"}, "expected_output": null}
+{"inputs": {"user": "What's 2 plus 2?"}, "expected_output": "4"}
+{"inputs": {"user": "Tell me about Adventure Time."}, "expected_output": null}
+{"inputs": {"user": "How are you feeling?"}, "expected_output": null}
+{"inputs": {"user": "What's your favorite color?"}, "expected_output": null}
+{"inputs": {"user": "Can you dance?"}, "expected_output": null}
+{"inputs": {"user": "What time is it?"}, "expected_output": null}
+{"inputs": {"user": "Tell me a fun fact."}, "expected_output": null}
+{"inputs": {"user": "What's a Raspberry Pi?"}, "expected_output": null}
+{"inputs": {"user": "Are you cute?"}, "expected_output": null}
+{"inputs": {"user": "Look around and tell me what you see."}, "expected_output": null}
+{"inputs": {"user": "Compliment my outfit."}, "expected_output": null}
+{"inputs": {"user": "What's the meaning of life?"}, "expected_output": null}
+{"inputs": {"user": "Be sad for a moment."}, "expected_output": null}
+{"inputs": {"user": "Pretend you're a pirate."}, "expected_output": null}
+{"inputs": {"user": "Goodbye!"}, "expected_output": null}
+{"inputs": {"user": "Where are you from?"}, "expected_output": null}
+{"inputs": {"user": "Do you have friends?"}, "expected_output": null}
+{"inputs": {"user": "What's your favorite food?"}, "expected_output": null}
+{"inputs": {"user": "Recommend me a snack."}, "expected_output": null}
+{"inputs": {"user": "Are you scared of anything?"}, "expected_output": null}
+{"inputs": {"user": "Tell me something surprising."}, "expected_output": null}
+{"inputs": {"user": "What's the weather like?"}, "expected_output": null}
