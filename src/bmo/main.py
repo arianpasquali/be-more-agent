@@ -87,30 +87,54 @@ def run() -> None:
     face = FacePlayer(faces_dir="faces")
 
     def loop() -> None:
-        # sounddevice ships no type stubs; ignore stub-not-found diagnostic
-        import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
+        # Imports deferred so module is importable without portaudio/scipy at runtime.
+        # Both packages lack type stubs.
+        import sounddevice as sd  # noqa: I001  # pyright: ignore[reportMissingTypeStubs]
+        from scipy.signal import resample_poly  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 
-        log.info("listening for wakeword...")
+        # Try the configured sample_rate first; fall back to the device's native
+        # default if the mic refuses it (common with USB mics that only do 44.1k/48k).
+        native_rate = settings.sample_rate
+        try:
+            sd.check_input_settings(  # pyright: ignore[reportUnknownMemberType]
+                device=settings.mic_device_index, samplerate=settings.sample_rate, channels=1
+            )
+        except Exception:
+            info = sd.query_devices(settings.mic_device_index, "input")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            native_rate = int(info["default_samplerate"])  # pyright: ignore[reportUnknownArgumentType]
+            log.warning(
+                "mic does not support %dHz; falling back to device default %dHz (will resample)",
+                settings.sample_rate,
+                native_rate,
+            )
+
+        wake_rate = settings.sample_rate
+        chunk_n = max(1, int(1280 * native_rate / wake_rate))
+
+        log.info("listening for wakeword (native %dHz, wake %dHz)...", native_rate, wake_rate)
         face.set_state(FaceState.IDLE)
         with sd.InputStream(
-            samplerate=settings.sample_rate,
+            samplerate=native_rate,
             channels=1,
             device=settings.mic_device_index,
             dtype="int16",
         ) as stream:
             while True:
-                # sounddevice lacks type stubs; stream.read() returns ndarray
-                data, _ = stream.read(1280)  # pyright: ignore[reportUnknownMemberType]
-                if wake.detect(data[:, 0]):
+                data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
+                mono: np.ndarray = data[:, 0]
+                if native_rate != wake_rate:
+                    resampled = resample_poly(mono, wake_rate, native_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
+                    mono = np.asarray(resampled, dtype=np.int16)
+                if wake.detect(mono):
                     log.info("wakeword detected")
                     handle_one_utterance(
                         settings=settings,
                         record_fn=lambda: record_until_silence(
-                            sample_rate=settings.sample_rate,
+                            sample_rate=native_rate,
                             device=settings.mic_device_index,
                         ),
                         stt_fn=lambda audio: transcribe(
-                            audio, settings.sample_rate, http_client, model=settings.orq_stt_model
+                            audio, native_rate, http_client, model=settings.orq_stt_model
                         ),
                         orq_client=orq_client,
                         tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
