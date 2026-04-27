@@ -36,11 +36,15 @@ def handle_one_utterance(
 ) -> None:
     face.set_state(FaceState.LISTENING)
     audio = record_fn()
+    if audio.size == 0:
+        log.info("no audio captured, skipping")
+        face.set_state(FaceState.IDLE)
+        return
 
     face.set_state(FaceState.THINKING)
     text = stt_fn(audio).strip()
     log.info("heard: %r", text)
-    if not text:
+    if not text or text in (".", "!", "?"):
         log.info("empty transcript, skipping")
         face.set_state(FaceState.IDLE)
         return

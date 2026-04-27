@@ -19,34 +19,65 @@ def _rms(chunk: np.ndarray) -> float:
 
 def record_until_silence(
     sample_rate: int = 16000,
-    max_seconds: float = 8.0,
-    silence_seconds: float = 0.8,
+    max_seconds: float = 10.0,
+    silence_seconds: float = 1.2,
+    initial_wait_seconds: float = 5.0,
     device: int | None = None,
     chunk_ms: int = 100,
 ) -> np.ndarray:
-    """Block-record from mic until trailing silence or max_seconds."""
+    """Block-record from mic until trailing silence or max_seconds.
+
+    Two-phase recording:
+      1. Wait up to initial_wait_seconds for ANY chunk above SILENCE_RMS
+         (i.e. user starts speaking). Discard leading silence.
+      2. Once speech detected, keep recording until silence_seconds of
+         continuous silence OR total max_seconds reached.
+
+    This avoids capturing only the gap between wakeword and the first
+    word, which was producing empty / "." Whisper transcripts.
+    """
     chunk_n = int(sample_rate * chunk_ms / 1000)
     silence_chunks_needed = int(silence_seconds * 1000 / chunk_ms)
     max_chunks = int(max_seconds * 1000 / chunk_ms)
+    initial_wait_chunks = int(initial_wait_seconds * 1000 / chunk_ms)
 
     # sounddevice ships no type stubs; ignore the stub-not-found diagnostic
     import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
     captured: list[np.ndarray] = []
     silent_run = 0
+    speech_started = False
+    peak_rms = 0.0
 
     with sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
         samplerate=sample_rate, channels=1, device=device, dtype="float32"
     ) as stream:
-        for _ in range(max_chunks):
-            # sounddevice lacks type stubs; stream.read() returns ndarray
+        for i in range(max_chunks):
             data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
             mono = data[:, 0]
+            level = _rms(mono)
+            peak_rms = max(peak_rms, level)
+
+            if not speech_started:
+                if level >= SILENCE_RMS:
+                    speech_started = True
+                    captured.append(mono.copy())
+                elif i >= initial_wait_chunks:
+                    log.info(
+                        "no speech heard within %.1fs (peak rms=%.4f)",
+                        initial_wait_seconds,
+                        peak_rms,
+                    )
+                    return np.array([], dtype=np.float32)
+                continue
+
             captured.append(mono.copy())
-            silent_run = silent_run + 1 if _rms(mono) < SILENCE_RMS else 0
-            if silent_run >= silence_chunks_needed and len(captured) > silence_chunks_needed:
+            silent_run = silent_run + 1 if level < SILENCE_RMS else 0
+            if silent_run >= silence_chunks_needed:
                 break
 
+    if captured:
+        log.info("captured %.1fs (peak rms=%.4f)", len(captured) * chunk_ms / 1000, peak_rms)
     return np.concatenate(captured) if captured else np.array([], dtype=np.float32)
 
 
