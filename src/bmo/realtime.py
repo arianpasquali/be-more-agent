@@ -87,20 +87,28 @@ async def _session_loop(
     async with client.realtime.connect(model=settings.openai_realtime_model) as conn:
         # The openai SDK's typed Session model trails the API surface; cast through
         # Any so we can pass session.update kwargs straight through.
+        # GA Realtime schema: voice + audio formats nested under session.audio,
+        # modalities renamed to output_modalities.
         session_cfg = cast(
             Any,
             {
                 "type": "realtime",
+                "output_modalities": ["audio"],
                 "instructions": instructions,
-                "voice": settings.openai_realtime_voice,
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.5,
-                    "silence_duration_ms": 600,
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcm", "rate": INPUT_RATE},
+                        "turn_detection": {
+                            "type": "server_vad",
+                            "threshold": 0.5,
+                            "silence_duration_ms": 600,
+                        },
+                    },
+                    "output": {
+                        "format": {"type": "audio/pcm", "rate": OUTPUT_RATE},
+                        "voice": settings.openai_realtime_voice,
+                    },
                 },
-                "modalities": ["audio", "text"],
             },
         )
         await conn.session.update(session=session_cfg)
