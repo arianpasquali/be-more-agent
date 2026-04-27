@@ -24,6 +24,9 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Install system audio libs
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 portaudio19-dev
+
       - name: Sync dependencies
         run: uv sync --extra dev
 

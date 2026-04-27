@@ -18,7 +18,7 @@ def test_record_until_silence_stops_on_quiet():
     fake_stream.read.side_effect = lambda n: (next(chunks).reshape(-1, 1), False)
 
     with patch(
-        "bmo.audio_io.sd.InputStream",
+        "sounddevice.InputStream",
         return_value=MagicMock(__enter__=MagicMock(return_value=fake_stream), __exit__=MagicMock()),
     ):
         out = record_until_silence(sample_rate=16000, max_seconds=3, silence_seconds=0.8)
