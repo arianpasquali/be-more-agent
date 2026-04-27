@@ -90,6 +90,7 @@ async def _session_loop(
         session_cfg = cast(
             Any,
             {
+                "type": "realtime",
                 "instructions": instructions,
                 "voice": settings.openai_realtime_voice,
                 "input_audio_format": "pcm16",
