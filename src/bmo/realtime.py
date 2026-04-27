@@ -29,7 +29,7 @@ from opentelemetry import trace
 
 from bmo.config import Settings
 from bmo.faces import FacePlayer, FaceState
-from bmo.observability import get_tracer, setup_tracing
+from bmo.observability import force_flush, get_tracer, setup_tracing
 
 __all__ = ["run_realtime_session"]
 
@@ -388,6 +388,8 @@ async def _session_loop(
             with contextlib.suppress(Exception):
                 session_span.set_attribute("bmo.turns", turn_count)
                 session_span.end()
+            with contextlib.suppress(Exception):
+                force_flush()
             log.info("realtime session closed (%d turns)", turn_count)
             try:
                 out_proc.wait(timeout=2)
