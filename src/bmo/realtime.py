@@ -116,34 +116,62 @@ async def _session_loop(
         )
         await conn.session.update(session=session_cfg)
 
-        # Output: stream raw pcm16 24kHz mono to ffplay's stdin so playback
-        # routes through PulseAudio/PipeWire (= the user's selected default
-        # sink, including Bluetooth headsets). sounddevice would talk to ALSA
-        # directly and ignore the PulseAudio default.
-        if not shutil.which("ffplay"):
-            raise RuntimeError("ffplay not found — install ffmpeg")
-        out_proc = subprocess.Popen(
-            [
+        # Output: stream raw pcm16 24kHz mono to a player that respects the
+        # PulseAudio/PipeWire default sink (= the user's selected output,
+        # including Bluetooth headsets). sounddevice would talk to ALSA
+        # directly and ignore the PA default. Prefer paplay (native PA raw
+        # player), fall back to ffplay if paplay isn't installed.
+        if shutil.which("paplay"):
+            out_cmd = [
+                "paplay",
+                "--raw",
+                "--format=s16le",
+                f"--rate={OUTPUT_RATE}",
+                "--channels=1",
+                "--latency-msec=80",
+            ]
+        elif shutil.which("ffplay"):
+            out_cmd = [
                 "ffplay",
                 "-nodisp",
-                "-autoexit",
                 "-loglevel",
-                "error",
+                "warning",
                 "-f",
                 "s16le",
                 "-ar",
                 str(OUTPUT_RATE),
                 "-ac",
                 "1",
+                "-fflags",
+                "nobuffer",
                 "-i",
                 "pipe:0",
-            ],
+            ]
+        else:
+            raise RuntimeError("no audio player found — install pulseaudio-utils or ffmpeg")
+        log.info("audio output: %s", out_cmd[0])
+        out_proc = subprocess.Popen(
+            out_cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
         assert out_proc.stdin is not None  # type narrowing for pyright
         out_stdin = out_proc.stdin  # local non-Optional alias
+
+        # Drain stderr in a thread so the player's complaints surface in logs.
+        def _drain_stderr() -> None:
+            stderr = out_proc.stderr
+            if stderr is None:
+                return
+            for raw in stderr:
+                line = raw.decode("utf-8", "replace").rstrip()
+                if line:
+                    log.warning("%s: %s", out_cmd[0], line)
+
+        import threading
+
+        threading.Thread(target=_drain_stderr, daemon=True).start()
 
         in_stream = sd.RawInputStream(
             samplerate=mic_rate, channels=1, dtype="int16", device=settings.mic_device_index
