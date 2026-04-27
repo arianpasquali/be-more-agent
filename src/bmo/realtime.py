@@ -30,10 +30,10 @@ __all__ = ["run_realtime_session"]
 
 log = logging.getLogger(__name__)
 
-INPUT_RATE = 16000
+INPUT_RATE = 24000  # GA API requires >= 24000 Hz pcm16
 OUTPUT_RATE = 24000
 INPUT_CHUNK_MS = 100
-INPUT_CHUNK_SAMPLES = INPUT_RATE * INPUT_CHUNK_MS // 1000  # 1600 samples
+INPUT_CHUNK_SAMPLES = INPUT_RATE * INPUT_CHUNK_MS // 1000  # 2400 samples
 
 
 def _load_orq_instructions() -> str:
