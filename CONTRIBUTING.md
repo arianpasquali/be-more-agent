@@ -13,6 +13,30 @@ cp .env.example .env
 # fill in ORQ_API_KEY
 ```
 
+## Demo modes
+
+BMO supports two modes selected via `BMO_MODE` in `.env` (or as an env prefix):
+
+**`BMO_MODE=orq` (default):** Wakeword → Whisper STT → orq Agent → orq TTS → paplay. Full router trace visible in orq dashboard. Best for the live-prompt-editing demo.
+
+**`BMO_MODE=realtime`:** Wakeword opens an OpenAI Realtime API WebSocket session. Server-side VAD, sub-second latency, native barge-in. A shadow `OrqClient.invoke` fires per turn so a trace appears in the dashboard. Idle 90 s closes the session.
+
+Scripts for testing each mode without the wakeword:
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/chat.py` | Text-only REPL against the orq agent (no audio) |
+| `scripts/realtime_chat.py` | Standalone Realtime tester (mic + speaker, no wakeword, no GUI) |
+| `scripts/vad_meter.py` | Live VAD probability bars — verify mic input and tune threshold |
+| `scripts/face_trace.py` | Print face state transitions during a Realtime session (debug) |
+
+```bash
+uv run python scripts/chat.py
+uv run python scripts/realtime_chat.py
+uv run python scripts/vad_meter.py
+uv run python scripts/face_trace.py
+```
+
 ## Running
 
 ```bash
