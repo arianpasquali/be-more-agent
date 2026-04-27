@@ -91,6 +91,9 @@ def run() -> None:
         camera = None
 
     face = FacePlayer(faces_dir="faces")
+    realtime_mode = settings.bmo_mode.lower() == "realtime"
+    if realtime_mode:
+        log.info("BMO_MODE=realtime — wakeword opens an OpenAI Realtime session")
 
     def loop() -> None:
         # Imports deferred so module is importable without portaudio/scipy at runtime.
@@ -139,7 +142,18 @@ def run() -> None:
         while True:
             wait_for_wakeword()
             log.info("wakeword detected")
-            # Wakeword stream is closed here — mic is free for record_until_silence.
+            # Wakeword stream is closed here — mic is free for the next leg.
+            if realtime_mode:
+                from bmo.realtime import run_realtime_session
+
+                try:
+                    run_realtime_session(settings, face)
+                except Exception:
+                    log.exception("realtime session failed")
+                    face.set_state(FaceState.ERROR)
+                face.set_state(FaceState.IDLE)
+                continue
+
             handle_one_utterance(
                 settings=settings,
                 record_fn=lambda: record_until_silence(
