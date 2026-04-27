@@ -68,6 +68,22 @@ async def _session_loop(
         settings.openai_realtime_voice,
     )
 
+    # Probe mic native rate; we'll resample to INPUT_RATE before sending.
+    mic_rate = INPUT_RATE
+    try:
+        sd.check_input_settings(  # pyright: ignore[reportUnknownMemberType]
+            device=settings.mic_device_index, samplerate=INPUT_RATE, channels=1
+        )
+    except Exception:
+        info = sd.query_devices(settings.mic_device_index, "input")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        mic_rate = int(info["default_samplerate"])  # pyright: ignore[reportUnknownArgumentType]
+        log.warning(
+            "mic does not support %dHz; opening at %dHz and resampling for Realtime",
+            INPUT_RATE,
+            mic_rate,
+        )
+    mic_chunk_samples = INPUT_CHUNK_SAMPLES * mic_rate // INPUT_RATE
+
     async with client.realtime.connect(model=settings.openai_realtime_model) as conn:
         # The openai SDK's typed Session model trails the API surface; cast through
         # Any so we can pass session.update kwargs straight through.
@@ -90,7 +106,7 @@ async def _session_loop(
 
         out_stream = sd.RawOutputStream(samplerate=OUTPUT_RATE, channels=1, dtype="int16")
         in_stream = sd.RawInputStream(
-            samplerate=INPUT_RATE, channels=1, dtype="int16", device=settings.mic_device_index
+            samplerate=mic_rate, channels=1, dtype="int16", device=settings.mic_device_index
         )
         out_stream.start()
         in_stream.start()
@@ -99,16 +115,30 @@ async def _session_loop(
         loop = asyncio.get_running_loop()
         timeout_handle = loop.call_later(session_seconds, stop.set)
 
+        # Lazy import: scipy adds startup cost; only need it when resampling.
+        if mic_rate != INPUT_RATE:
+            from scipy.signal import (
+                resample_poly,  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
+            )
+        else:
+            resample_poly = None  # pyright: ignore[reportConstantRedefinition]
+
+        import numpy as np
+
         async def pump_mic() -> None:
             try:
                 while not stop.is_set():
                     read_chunk = cast(Any, in_stream.read)  # pyright: ignore[reportUnknownMemberType]
                     data, _ = await loop.run_in_executor(  # pyright: ignore[reportUnknownVariableType]
-                        None, read_chunk, INPUT_CHUNK_SAMPLES
+                        None, read_chunk, mic_chunk_samples
                     )
-                    await conn.input_audio_buffer.append(
-                        audio=base64.b64encode(bytes(data)).decode()  # pyright: ignore[reportUnknownArgumentType]
-                    )
+                    pcm: bytes = bytes(data)  # pyright: ignore[reportUnknownArgumentType]
+                    if resample_poly is not None:
+                        arr = np.frombuffer(pcm, dtype=np.int16)
+                        resampled = resample_poly(arr, INPUT_RATE, mic_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
+                        clipped = cast(Any, np.clip(resampled, -32768, 32767))
+                        pcm = clipped.astype(np.int16).tobytes()
+                    await conn.input_audio_buffer.append(audio=base64.b64encode(pcm).decode())
             except Exception:
                 log.exception("mic pump failed")
                 stop.set()
