@@ -3,13 +3,16 @@ set -euo pipefail
 
 echo "[bmo-orq] installing system deps…"
 sudo apt update
-sudo apt install -y python3.11 python3-pip libportaudio2 portaudio19-dev libatlas-base-dev espeak-ng ffmpeg git curl
+sudo apt install -y python3 python3-pip libportaudio2 portaudio19-dev libopenblas-dev espeak-ng ffmpeg git curl
 
 echo "[bmo-orq] installing uv…"
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
 fi
+
+echo "[bmo-orq] installing Python 3.11 via uv…"
+uv python install 3.11
 
 echo "[bmo-orq] syncing deps…"
 uv sync --extra pi
