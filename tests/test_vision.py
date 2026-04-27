@@ -1,6 +1,8 @@
 import base64
 import io
+
 from PIL import Image
+
 from bmo.vision import encode_image_b64, rotate_image
 
 

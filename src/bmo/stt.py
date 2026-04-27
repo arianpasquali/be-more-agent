@@ -20,8 +20,9 @@ SDK adaptation note:
 """
 
 import io
-import wave
 import logging
+import wave
+
 import numpy as np
 
 log = logging.getLogger(__name__)

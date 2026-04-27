@@ -1,16 +1,18 @@
 import logging
 import threading
-from typing import Callable, Any
-import numpy as np
-import httpx
+from collections.abc import Callable
+from typing import Any
 
+import httpx
+import numpy as np
+
+from bmo.audio_io import play_tts, record_until_silence
 from bmo.config import Settings, get_settings
-from bmo.orq_client import OrqClient
 from bmo.faces import FacePlayer, FaceState
-from bmo.vision import capture_b64
-from bmo.audio_io import record_until_silence, play_tts
-from bmo.wakeword import WakeWordDetector
+from bmo.orq_client import OrqClient
 from bmo.stt import transcribe
+from bmo.vision import capture_b64
+from bmo.wakeword import WakeWordDetector
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +73,7 @@ def run() -> None:
 
     try:
         from bmo.vision import PiCamera
+
         camera: Any = PiCamera(rotation=settings.camera_rotation)
     except Exception:
         log.warning("camera unavailable, vision disabled")
@@ -80,6 +83,7 @@ def run() -> None:
 
     def loop():
         import sounddevice as sd
+
         log.info("listening for wakeword...")
         face.set_state(FaceState.IDLE)
         with sd.InputStream(
@@ -98,7 +102,9 @@ def run() -> None:
                             sample_rate=settings.sample_rate,
                             device=settings.mic_device_index,
                         ),
-                        stt_fn=lambda audio: transcribe(audio, settings.sample_rate, http_client, model=settings.orq_stt_model),
+                        stt_fn=lambda audio: transcribe(
+                            audio, settings.sample_rate, http_client, model=settings.orq_stt_model
+                        ),
                         orq_client=orq_client,
                         tts_fn=lambda txt: play_tts(txt, voice=settings.piper_voice),
                         camera=camera,

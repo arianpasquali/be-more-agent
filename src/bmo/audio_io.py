@@ -2,6 +2,7 @@ import io
 import logging
 import subprocess
 import wave
+
 import numpy as np
 import sounddevice as sd
 
@@ -29,7 +30,9 @@ def record_until_silence(
     captured: list[np.ndarray] = []
     silent_run = 0
 
-    with sd.InputStream(samplerate=sample_rate, channels=1, device=device, dtype="float32") as stream:
+    with sd.InputStream(
+        samplerate=sample_rate, channels=1, device=device, dtype="float32"
+    ) as stream:
         for _ in range(max_chunks):
             data, _ = stream.read(chunk_n)
             mono = data[:, 0]

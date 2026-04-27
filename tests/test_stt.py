@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
+
 import numpy as np
+
 from bmo.stt import transcribe
 
 

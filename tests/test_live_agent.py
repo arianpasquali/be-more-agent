@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 from bmo.config import Settings
 from bmo.orq_client import OrqClient
 

@@ -1,10 +1,13 @@
 from unittest.mock import MagicMock
+
 from bmo.orq_client import OrqClient
 
 
 def make_settings():
-    from bmo.config import Settings
     import os
+
+    from bmo.config import Settings
+
     os.environ["ORQ_API_KEY"] = "sk-test"
     os.environ["ORQ_AGENT_KEY"] = "bmo_demo"
     return Settings()

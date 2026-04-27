@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+
 from bmo.config import Settings
 
 log = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ class OrqClient:
         self.settings = settings
         if sdk is None:
             from orq_ai_sdk import Orq
+
             sdk = Orq(api_key=settings.orq_api_key)
         self.sdk = sdk
         self._task_id: str | None = None
@@ -27,13 +29,15 @@ class OrqClient:
     def invoke(self, text: str, image_b64: str | None = None) -> str:
         parts: list[dict[str, Any]] = [{"kind": "text", "text": text}]
         if image_b64:
-            parts.append({
-                "kind": "file",
-                "file": {
-                    "bytes_": image_b64,
-                    "mime_type": "image/jpeg",
-                },
-            })
+            parts.append(
+                {
+                    "kind": "file",
+                    "file": {
+                        "bytes_": image_b64,
+                        "mime_type": "image/jpeg",
+                    },
+                }
+            )
 
         message: dict[str, Any] = {"role": "user", "parts": parts}
 

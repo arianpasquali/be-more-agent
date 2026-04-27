@@ -131,16 +131,19 @@ def main() -> int:
         except Exception as exc:
             err_str = str(exc).lower()
             # Treat "already exists" / duplicate-key errors as non-fatal
-            if "already" in err_str or "duplicate" in err_str or "conflict" in err_str or "exists" in err_str:
+            if (
+                "already" in err_str
+                or "duplicate" in err_str
+                or "conflict" in err_str
+                or "exists" in err_str
+            ):
                 print(f"  SKIP '{full_key}' — already exists (from API error).")
                 skip_count += 1
             else:
                 print(f"ERROR creating '{full_key}': {exc}", file=sys.stderr)
                 error_count += 1
 
-    print(
-        f"\nDone. created={success_count}, skipped={skip_count}, errors={error_count}"
-    )
+    print(f"\nDone. created={success_count}, skipped={skip_count}, errors={error_count}")
     return 0 if error_count == 0 else 1
 
 

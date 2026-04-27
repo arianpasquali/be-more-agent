@@ -1,13 +1,13 @@
-import threading
 import logging
+import threading
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import Callable
 
 log = logging.getLogger(__name__)
 
 
-class FaceState(str, Enum):
+class FaceState(str, Enum):  # noqa: UP042
     IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"
@@ -44,6 +44,7 @@ class FacePlayer:
 
     def run(self, on_close: Callable[[], None] | None = None) -> None:
         import tkinter as tk
+
         from PIL import Image, ImageTk
 
         self._tk = tk.Tk()

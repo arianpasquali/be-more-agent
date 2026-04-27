@@ -46,7 +46,7 @@ def load_api_key() -> str:
 def load_datapoints() -> list:
     rows = []
     with DATASET_JSONL.open() as f:
-        for lineno, raw in enumerate(f, 1):
+        for _lineno, raw in enumerate(f, 1):
             raw = raw.strip()
             if not raw:
                 continue
@@ -61,7 +61,9 @@ def find_or_create_dataset(sdk) -> str:
     resp = sdk.datasets.list(limit=50)
     datasets = resp.data if hasattr(resp, "data") else []
     for ds in datasets:
-        name = getattr(ds, "display_name", None) or (ds.get("display_name") if isinstance(ds, dict) else None)
+        name = getattr(ds, "display_name", None) or (
+            ds.get("display_name") if isinstance(ds, dict) else None
+        )
         if name == DATASET_NAME:
             ds_id = getattr(ds, "id", None) or (ds.get("id") if isinstance(ds, dict) else None)
             print(f"Found existing dataset '{DATASET_NAME}' with id={ds_id}")

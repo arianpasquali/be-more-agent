@@ -1,8 +1,10 @@
-from unittest.mock import MagicMock, patch
-import numpy as np
-from bmo.main import handle_one_utterance
-from bmo.config import Settings
 import os
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+
+from bmo.config import Settings
+from bmo.main import handle_one_utterance
 
 
 def make_settings():

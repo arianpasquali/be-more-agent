@@ -2,6 +2,7 @@ import base64
 import io
 import logging
 from typing import Protocol
+
 from PIL import Image
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class PiCamera:
 
     def __init__(self, rotation: int = 0):
         from picamera2 import Picamera2
+
         self._cam = Picamera2()
         self._cam.configure(self._cam.create_still_configuration(main={"size": (1024, 768)}))
         self._cam.start()
