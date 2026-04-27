@@ -1,5 +1,5 @@
-import os
 import pytest
+from pydantic import ValidationError
 from bmo.config import Settings
 
 
@@ -18,7 +18,7 @@ def test_missing_api_key_raises(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORQ_API_KEY", raising=False)
     monkeypatch.setenv("ORQ_AGENT_KEY", "bmo_demo")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Settings()
 
 
