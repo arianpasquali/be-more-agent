@@ -55,18 +55,28 @@ if [ ! -f voices/bmo.onnx ]; then
   curl -fL --retry 3 -o voices/bmo.onnx.json "${VOICE_BASE}/bmo.onnx.json"
 fi
 
-# Piper binary.
+# Piper binary + bundled .so libs. Install whole dir to /opt/piper and create
+# a wrapper in /usr/local/bin so LD_LIBRARY_PATH is set automatically.
 PIPER_REL="2023.11.14-2"
-if ! command -v piper >/dev/null 2>&1; then
-  echo "[bmo-orq] installing piper binary (release ${PIPER_REL}, arch ${PIPER_ARCH})…"
+PIPER_BIN="/usr/local/bin/piper"
+PIPER_HOME="/opt/piper"
+if [ ! -x "$PIPER_HOME/piper" ]; then
+  echo "[bmo-orq] installing piper (release ${PIPER_REL}, arch ${PIPER_ARCH})…"
   curl -fL --retry 3 -o piper.tar.gz \
     "https://github.com/rhasspy/piper/releases/download/${PIPER_REL}/piper_linux_${PIPER_ARCH}.tar.gz"
   tar -xzf piper.tar.gz
-  sudo mv piper/piper /usr/local/bin/piper
-  # Piper ships its bundled libs alongside the binary.
-  sudo cp -r piper/* /usr/local/share/piper/ 2>/dev/null || true
-  rm -rf piper piper.tar.gz
+  sudo rm -rf "$PIPER_HOME"
+  sudo mv piper "$PIPER_HOME"
+  rm -f piper.tar.gz
 fi
+
+# (Re-)install wrapper that exports LD_LIBRARY_PATH so libpiper_phonemize.so.1 etc resolve.
+sudo tee "$PIPER_BIN" >/dev/null <<EOF
+#!/usr/bin/env bash
+export LD_LIBRARY_PATH="${PIPER_HOME}:\${LD_LIBRARY_PATH:-}"
+exec "${PIPER_HOME}/piper" "\$@"
+EOF
+sudo chmod +x "$PIPER_BIN"
 
 if [ ! -f .env ]; then
   cp .env.example .env
