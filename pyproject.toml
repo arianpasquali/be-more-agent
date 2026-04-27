@@ -83,3 +83,10 @@ skip_covered = false
 # so we skip building it from source when not on Linux.
 [tool.uv]
 no-build-package = ["python-prctl"]
+# picamera2 declares pyqt5/pyqt5-qt5 for an optional preview window we never use;
+# pyqt5-qt5 has no aarch64 wheel so it breaks Pi installs. Force-skip them.
+override-dependencies = [
+    "pyqt5; sys_platform == 'never'",
+    "pyqt5-qt5; sys_platform == 'never'",
+    "pyqt5-sip; sys_platform == 'never'",
+]
