@@ -118,6 +118,7 @@ async def _session_loop(
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcm", "rate": INPUT_RATE},
+                        "transcription": {"model": "whisper-1"},
                         "turn_detection": {
                             "type": "server_vad",
                             "threshold": 0.5,
@@ -249,6 +250,7 @@ async def _session_loop(
             response_started_at = 0.0
             idle_task: asyncio.Task[None] | None = None
             turn_first_audio_t: float | None = None
+            turn_started_at: float = 0.0
 
             async def _delayed_idle(delay_s: float) -> None:
                 try:
@@ -312,6 +314,7 @@ async def _session_loop(
                         turn_user_text = ""
                         turn["audio_in_bytes"] = 0
                         turn_first_audio_t = None
+                        turn_started_at = loop.time()
                     elif etype == "input_audio_buffer.speech_stopped":
                         face.set_state(FaceState.THINKING)
                     elif etype == "response.created":
@@ -333,12 +336,10 @@ async def _session_loop(
                             face.set_state(FaceState.IDLE)
                         if turn["span"] is not None:
                             turn["span"].set_attribute("bmo.turn.audio_out_bytes", response_bytes)
-                            if turn_first_audio_t is not None:
+                            if turn_first_audio_t is not None and turn_started_at:
                                 turn["span"].set_attribute(
                                     "bmo.turn.first_audio_latency_ms",
-                                    int(
-                                        (turn_first_audio_t - turn["span"].start_time / 1e9) * 1000
-                                    ),
+                                    int((turn_first_audio_t - turn_started_at) * 1000),
                                 )
                             turn["span"].set_attribute(
                                 "bmo.turn.audio_in_bytes", turn["audio_in_bytes"]
