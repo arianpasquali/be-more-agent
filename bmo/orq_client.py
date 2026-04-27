@@ -6,48 +6,69 @@ log = logging.getLogger(__name__)
 
 
 class OrqClient:
+    """Thin wrapper around the orq-ai-sdk agents.responses API.
+
+    SDK shape (verified against orq-ai-sdk installed in .venv):
+      - sdk.agents.responses.create(agent_key, message, ...) -> CreateAgentResponse
+      - message: {"role": "user", "parts": [{"kind": "text", "text": "..."}]}
+      - image: part {"kind": "file", "file": {"bytes_": "<b64>", "mime_type": "image/jpeg"}}
+      - response.output: list of AgentResponseMessage
+        each message has .parts: list with .kind and .text attributes
+    """
+
     def __init__(self, settings: Settings, sdk: Any | None = None):
         self.settings = settings
         if sdk is None:
             from orq_ai_sdk import Orq
             sdk = Orq(api_key=settings.orq_api_key)
         self.sdk = sdk
-        self._previous_response_id: str | None = None
+        self._task_id: str | None = None
 
     def invoke(self, text: str, image_b64: str | None = None) -> str:
+        parts: list[dict[str, Any]] = [{"kind": "text", "text": text}]
         if image_b64:
-            content = [
-                {"type": "input_text", "text": text},
-                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}"},
-            ]
-            payload: Any = [{"type": "message", "role": "user", "content": content}]
-        else:
-            payload = text
+            parts.append({
+                "kind": "file",
+                "file": {
+                    "bytes_": image_b64,
+                    "mime_type": "image/jpeg",
+                },
+            })
+
+        message: dict[str, Any] = {"role": "user", "parts": parts}
 
         kwargs: dict[str, Any] = {
-            "model": f"agent/{self.settings.orq_agent_key}",
-            "input": payload,
+            "agent_key": self.settings.orq_agent_key,
+            "message": message,
         }
-        if self._previous_response_id:
-            kwargs["previous_response_id"] = self._previous_response_id
+        if self._task_id:
+            kwargs["task_id"] = self._task_id
 
         try:
-            resp = self.sdk.responses.create(**kwargs)
+            resp = self.sdk.agents.responses.create(**kwargs)
         except Exception:
             log.exception("orq invoke failed")
             raise
 
-        self._previous_response_id = getattr(resp, "id", None)
+        self._task_id = getattr(resp, "task_id", None)
         return self._extract_text(resp)
 
     @staticmethod
     def _extract_text(resp: Any) -> str:
-        for item in getattr(resp, "output", []) or []:
-            for part in getattr(item, "content", []) or []:
-                text = getattr(part, "text", None)
-                if text:
-                    return text
+        for msg in getattr(resp, "output", []) or []:
+            for part in getattr(msg, "parts", []) or []:
+                # A2A TextPart has .kind == "text" and .text attribute
+                if getattr(part, "kind", None) == "text":
+                    text = getattr(part, "text", None)
+                    if text:
+                        return text
+                # Fallback: some SDK versions use .actual_instance wrapping
+                actual = getattr(part, "actual_instance", None)
+                if actual is not None:
+                    text = getattr(actual, "text", None)
+                    if text:
+                        return text
         return ""
 
     def reset_thread(self) -> None:
-        self._previous_response_id = None
+        self._task_id = None
