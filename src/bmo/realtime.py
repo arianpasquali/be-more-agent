@@ -25,9 +25,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from openai import AsyncOpenAI
+from opentelemetry import trace
 
 from bmo.config import Settings
 from bmo.faces import FacePlayer, FaceState
+from bmo.observability import get_tracer, setup_tracing
 
 __all__ = ["run_realtime_session"]
 
@@ -62,6 +64,9 @@ async def _session_loop(
     # sounddevice ships no type stubs
     import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
+    setup_tracing(settings.orq_api_key, service_name="bmo")
+    tracer = get_tracer("bmo.realtime")
+
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     instructions = _load_orq_instructions()
 
@@ -86,6 +91,18 @@ async def _session_loop(
             mic_rate,
         )
     mic_chunk_samples = INPUT_CHUNK_SAMPLES * mic_rate // INPUT_RATE
+
+    session_span = tracer.start_span(
+        "bmo.realtime.session",
+        attributes={
+            "gen_ai.system": "openai",
+            "gen_ai.operation.name": "realtime",
+            "gen_ai.request.model": settings.openai_realtime_model,
+            "bmo.mode": "realtime",
+            "bmo.tts.voice": settings.openai_realtime_voice,
+        },
+    )
+    turn_count = 0
 
     async with client.realtime.connect(model=settings.openai_realtime_model) as conn:
         # The openai SDK's typed Session model trails the API surface; cast through
@@ -191,6 +208,10 @@ async def _session_loop(
 
         import numpy as np
 
+        # Per-turn tracing state shared between pump_mic and pump_events.
+        # Mutable holder dict to dodge nonlocal-binding ordering issues.
+        turn: dict[str, Any] = {"span": None, "audio_in_bytes": 0}
+
         async def pump_mic() -> None:
             try:
                 while not stop.is_set():
@@ -204,6 +225,8 @@ async def _session_loop(
                         resampled = resample_poly(arr, INPUT_RATE, mic_rate)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
                         clipped: Any = np.clip(resampled, -32768, 32767)
                         pcm = clipped.astype(np.int16).tobytes()
+                    if turn["span"] is not None:
+                        turn["audio_in_bytes"] += len(pcm)
                     await conn.input_audio_buffer.append(audio=base64.b64encode(pcm).decode())
             except Exception:
                 log.exception("mic pump failed")
@@ -214,10 +237,12 @@ async def _session_loop(
         playback_tail_padding_s = 0.4
 
         async def pump_events() -> None:
+            nonlocal turn_count
             speaking_started = False
             response_bytes = 0
             response_started_at = 0.0
             idle_task: asyncio.Task[None] | None = None
+            turn_first_audio_t: float | None = None
 
             async def _delayed_idle(delay_s: float) -> None:
                 try:
@@ -244,6 +269,8 @@ async def _session_loop(
                             if not speaking_started:
                                 speaking_started = True
                                 response_started_at = loop.time()
+                                if turn_first_audio_t is None:
+                                    turn_first_audio_t = response_started_at
                                 face.set_state(FaceState.SPEAKING)
                             try:
                                 pcm = base64.b64decode(audio_b64)
@@ -261,14 +288,28 @@ async def _session_loop(
                             idle_task = None
                         speaking_started = False
                         face.set_state(FaceState.LISTENING)
+                        # Open a new turn span (close any leftover one first).
+                        if turn["span"] is not None:
+                            turn["span"].end()
+                        turn_count += 1
+                        turn["span"] = tracer.start_span(
+                            f"bmo.realtime.turn.{turn_count}",
+                            context=trace.set_span_in_context(session_span),
+                            attributes={
+                                "gen_ai.system": "openai",
+                                "gen_ai.operation.name": "realtime.turn",
+                                "gen_ai.request.model": settings.openai_realtime_model,
+                                "bmo.turn.index": turn_count,
+                            },
+                        )
+                        turn_user_text = ""
+                        turn["audio_in_bytes"] = 0
+                        turn_first_audio_t = None
                     elif etype == "input_audio_buffer.speech_stopped":
                         face.set_state(FaceState.THINKING)
                     elif etype == "response.created":
                         _start_response()
                     elif etype in ("response.audio.done", "response.output_audio.done"):
-                        # Server is done streaming bytes; local paplay buffer
-                        # still draining. Compute expected playback end and
-                        # schedule the IDLE transition then.
                         if speaking_started and response_bytes:
                             play_seconds = response_bytes / 2 / OUTPUT_RATE
                             elapsed = loop.time() - response_started_at
@@ -283,14 +324,36 @@ async def _session_loop(
                             idle_task = asyncio.create_task(_delayed_idle(remaining))
                         else:
                             face.set_state(FaceState.IDLE)
+                        if turn["span"] is not None:
+                            turn["span"].set_attribute("bmo.turn.audio_out_bytes", response_bytes)
+                            if turn_first_audio_t is not None:
+                                turn["span"].set_attribute(
+                                    "bmo.turn.first_audio_latency_ms",
+                                    int(
+                                        (turn_first_audio_t - turn["span"].start_time / 1e9) * 1000
+                                    ),
+                                )
+                            turn["span"].set_attribute(
+                                "bmo.turn.audio_in_bytes", turn["audio_in_bytes"]
+                            )
+                            turn["span"].end()
+                            turn["span"] = None
                         speaking_started = False
                     elif etype in (
                         "response.audio_transcript.done",
                         "response.output_audio_transcript.done",
                     ):
-                        log.info("bmo said: %r", getattr(event, "transcript", ""))
+                        bmo_text = getattr(event, "transcript", "") or ""
+                        log.info("bmo said: %r", bmo_text)
+                        if turn["span"] is not None:
+                            turn["span"].set_attribute("gen_ai.completion", bmo_text)
+                            turn["span"].set_attribute("bmo.turn.output_text", bmo_text)
                     elif etype == "conversation.item.input_audio_transcription.completed":
-                        log.info("heard: %r", getattr(event, "transcript", ""))
+                        turn_user_text = getattr(event, "transcript", "") or ""
+                        log.info("heard: %r", turn_user_text)
+                        if turn["span"] is not None:
+                            turn["span"].set_attribute("gen_ai.prompt", turn_user_text)
+                            turn["span"].set_attribute("bmo.turn.input_text", turn_user_text)
                     elif etype == "error":
                         log.error("realtime error: %s", getattr(event, "error", event))
                         face.set_state(FaceState.ERROR)
@@ -314,6 +377,9 @@ async def _session_loop(
             in_stream.close()
             with contextlib.suppress(Exception):
                 out_stdin.close()
+            with contextlib.suppress(Exception):
+                session_span.set_attribute("bmo.turns", turn_count)
+                session_span.end()
             try:
                 out_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
