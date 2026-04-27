@@ -8,6 +8,7 @@ scipy>=1.11.0
 Pillow>=10.0.0
 openwakeword>=0.6.0
 onnxruntime>=1.17.0
+httpx>=0.26.0
 picamera2; sys_platform == "linux"
 pytest>=8.0.0
 pytest-mock>=3.12.0
