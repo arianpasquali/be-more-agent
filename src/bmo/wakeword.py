@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import logging
 
 import numpy as np
 from openwakeword.model import Model
 
 log = logging.getLogger(__name__)
+
+__all__ = ["WakeWordDetector"]
 
 
 class WakeWordDetector:

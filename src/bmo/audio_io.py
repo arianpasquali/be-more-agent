@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import logging
 import subprocess
@@ -9,6 +11,8 @@ import sounddevice as sd
 log = logging.getLogger(__name__)
 
 SILENCE_RMS = 0.02
+
+__all__ = ["SILENCE_RMS", "play_tts", "record_until_silence"]
 
 
 def _rms(chunk: np.ndarray) -> float:

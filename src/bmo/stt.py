@@ -19,6 +19,8 @@ SDK adaptation note:
     a MagicMock.
 """
 
+from __future__ import annotations
+
 import io
 import logging
 import wave
@@ -28,6 +30,8 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 ORQ_TRANSCRIPTION_URL = "https://api.orq.ai/v3/router/audio/transcriptions"
+
+__all__ = ["transcribe"]
 
 
 def _audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:

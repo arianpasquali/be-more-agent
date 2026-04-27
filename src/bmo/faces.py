@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import threading
 from collections.abc import Callable
@@ -5,6 +7,8 @@ from enum import Enum
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+__all__ = ["FacePlayer", "FaceState", "valid_transition"]
 
 
 class FaceState(str, Enum):  # noqa: UP042

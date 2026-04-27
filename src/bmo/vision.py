@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import io
 import logging
@@ -6,6 +8,8 @@ from typing import Protocol
 from PIL import Image
 
 log = logging.getLogger(__name__)
+
+__all__ = ["CameraProtocol", "PiCamera", "capture_b64", "encode_image_b64", "rotate_image"]
 
 
 def encode_image_b64(img: Image.Image, quality: int = 80) -> str:

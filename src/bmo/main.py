@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import threading
 from collections.abc import Callable
@@ -17,6 +19,8 @@ from bmo.wakeword import WakeWordDetector
 log = logging.getLogger(__name__)
 
 ERROR_REPLY = "I can't reach my brain right now. Try again in a sec."
+
+__all__ = ["ERROR_REPLY", "handle_one_utterance", "run"]
 
 
 def handle_one_utterance(
