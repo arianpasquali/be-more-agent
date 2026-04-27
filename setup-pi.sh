@@ -44,39 +44,9 @@ uv python install 3.11
 echo "[bmo-orq] syncing deps…"
 uv sync --extra pi
 
-# BMO voice (custom Piper model). Pinned to v1.0-voice — the "latest" GitHub
-# release for this repo is v1.0-enclosure which doesn't carry voice assets.
-VOICE_REL="v1.0-voice"
-VOICE_BASE="https://github.com/brenpoly/be-more-agent/releases/download/${VOICE_REL}"
-if [ ! -f voices/bmo.onnx ]; then
-  echo "[bmo-orq] downloading BMO voice (release ${VOICE_REL})…"
-  mkdir -p voices
-  curl -fL --retry 3 -o voices/bmo.onnx      "${VOICE_BASE}/bmo.onnx"
-  curl -fL --retry 3 -o voices/bmo.onnx.json "${VOICE_BASE}/bmo.onnx.json"
-fi
-
-# Piper binary + bundled .so libs. Install whole dir to /opt/piper and create
-# a wrapper in /usr/local/bin so LD_LIBRARY_PATH is set automatically.
-PIPER_REL="2023.11.14-2"
-PIPER_BIN="/usr/local/bin/piper"
-PIPER_HOME="/opt/piper"
-if [ ! -x "$PIPER_HOME/piper" ]; then
-  echo "[bmo-orq] installing piper (release ${PIPER_REL}, arch ${PIPER_ARCH})…"
-  curl -fL --retry 3 -o piper.tar.gz \
-    "https://github.com/rhasspy/piper/releases/download/${PIPER_REL}/piper_linux_${PIPER_ARCH}.tar.gz"
-  tar -xzf piper.tar.gz
-  sudo rm -rf "$PIPER_HOME"
-  sudo mv piper "$PIPER_HOME"
-  rm -f piper.tar.gz
-fi
-
-# (Re-)install wrapper that exports LD_LIBRARY_PATH so libpiper_phonemize.so.1 etc resolve.
-sudo tee "$PIPER_BIN" >/dev/null <<EOF
-#!/usr/bin/env bash
-export LD_LIBRARY_PATH="${PIPER_HOME}:\${LD_LIBRARY_PATH:-}"
-exec "${PIPER_HOME}/piper" "\$@"
-EOF
-sudo chmod +x "$PIPER_BIN"
+# TTS now runs through orq AI Router (/v3/router/audio/speech) and audio
+# is played via ffplay (installed above with ffmpeg). Local Piper is no
+# longer required — for v2 we may bring back a self-hosted BMO voice.
 
 if [ ! -f .env ]; then
   cp .env.example .env

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from bmo.audio_io import play_tts, record_until_silence
+from bmo.audio_io import play_audio_bytes, record_until_silence
 
 
 def test_record_until_silence_stops_on_quiet():
@@ -25,12 +25,26 @@ def test_record_until_silence_stops_on_quiet():
     assert out.shape[0] > 0
 
 
-def test_play_tts_invokes_piper_subprocess():
-    with patch("bmo.audio_io.subprocess.Popen") as p:
+def test_play_audio_bytes_pipes_to_ffplay():
+    with (
+        patch(
+            "bmo.audio_io.shutil.which",
+            side_effect=lambda c: "/usr/bin/ffplay" if c == "ffplay" else None,
+        ),
+        patch("bmo.audio_io.subprocess.Popen") as p,
+    ):
         proc = MagicMock()
-        proc.communicate.return_value = (b"WAVDATA", b"")
+        proc.communicate.return_value = (b"", b"")
         proc.returncode = 0
         p.return_value = proc
-        with patch("bmo.audio_io._play_wav_bytes") as play:
-            play_tts("hello", piper_bin="piper", voice="voices/bmo.onnx")
-            play.assert_called_once()
+
+        play_audio_bytes(b"MP3DATA")
+
+        cmd = p.call_args.args[0]
+        assert cmd[0] == "ffplay"
+        proc.communicate.assert_called_once_with(b"MP3DATA")
+
+
+def test_play_audio_bytes_logs_error_when_no_player():
+    with patch("bmo.audio_io.shutil.which", return_value=None):
+        play_audio_bytes(b"MP3DATA")  # should not raise

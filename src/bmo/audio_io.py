@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import io
 import logging
+import shutil
 import subprocess
-import wave
 
 import numpy as np
 
@@ -11,7 +10,7 @@ log = logging.getLogger(__name__)
 
 SILENCE_RMS = 0.02
 
-__all__ = ["SILENCE_RMS", "play_tts", "record_until_silence"]
+__all__ = ["SILENCE_RMS", "play_audio_bytes", "record_until_silence"]
 
 
 def _rms(chunk: np.ndarray) -> float:
@@ -51,35 +50,24 @@ def record_until_silence(
     return np.concatenate(captured) if captured else np.array([], dtype=np.float32)
 
 
-def _play_wav_bytes(wav_bytes: bytes) -> None:
-    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
-        rate = wf.getframerate()
-        frames = wf.readframes(wf.getnframes())
-        audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    # sounddevice ships no type stubs; ignore the stub-not-found diagnostic
-    import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
+def play_audio_bytes(audio_bytes: bytes) -> None:
+    """Play audio bytes (mp3/wav/etc) via ffplay or mpg123 — whichever is on PATH.
 
-    # sounddevice lacks type stubs; sd.play() signature is partially unknown
-    sd.play(audio, samplerate=rate)  # pyright: ignore[reportUnknownMemberType]
-    sd.wait()
-
-
-def play_tts(text: str, piper_bin: str = "piper", voice: str = "voices/bmo.onnx") -> None:
-    proc = subprocess.Popen(
-        [piper_bin, "--model", voice, "--output_raw"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    out, err = proc.communicate(text.encode("utf-8"))
-    if proc.returncode != 0:
-        log.error("piper failed: %s", err.decode("utf-8", "replace"))
+    Avoids sounddevice for output because it requires a configured default
+    output device and pulls the whole PortAudio output stack just to play
+    a one-shot reply.
+    """
+    if shutil.which("ffplay"):
+        cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error", "-i", "pipe:0"]
+    elif shutil.which("mpg123"):
+        cmd = ["mpg123", "-q", "-"]
+    else:
+        log.error("no audio player found (install ffmpeg or mpg123)")
         return
-    # Wrap raw int16 PCM into a wave container at piper default 22050.
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(22050)
-        wf.writeframes(out)
-    _play_wav_bytes(buf.getvalue())
+
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+    )
+    _, err = proc.communicate(audio_bytes)
+    if proc.returncode != 0:
+        log.error("audio playback failed (%s): %s", cmd[0], err.decode("utf-8", "replace"))

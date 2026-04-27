@@ -139,21 +139,12 @@ if [ "$PLATFORM" = "Linux" ]; then
     warn "libportaudio2 not found in standard paths (sounddevice import above is the real test)"
   fi
 
-  if command -v piper >/dev/null 2>&1; then
-    ok "piper binary in PATH"
+  if command -v ffplay >/dev/null 2>&1; then
+    ok "ffplay (TTS playback) in PATH"
+  elif command -v mpg123 >/dev/null 2>&1; then
+    ok "mpg123 (TTS playback fallback) in PATH"
   else
-    fail "piper not in PATH (run ./setup-pi.sh to install)"
-  fi
-
-  if [ -f voices/bmo.onnx ]; then
-    ok "voices/bmo.onnx present"
-  else
-    fail "voices/bmo.onnx missing (run ./setup-pi.sh)"
-  fi
-  if [ -f voices/bmo.onnx.json ]; then
-    ok "voices/bmo.onnx.json present"
-  else
-    warn "voices/bmo.onnx.json missing (Piper sample-rate may default wrong)"
+    fail "neither ffplay nor mpg123 found (sudo apt install ffmpeg)"
   fi
 
   if [ -f wakeword.onnx ]; then
