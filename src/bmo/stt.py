@@ -63,6 +63,8 @@ def transcribe(
     sample_rate: int,
     client: _HttpClient,
     model: str = "openai/whisper-1",
+    language: str | None = "en",
+    prompt: str | None = "BMO is a friendly robot at a tech booth.",
     url: str = ORQ_TRANSCRIPTION_URL,
 ) -> str:
     """Transcribe float32 audio via the orq AI Router Whisper endpoint.
@@ -72,16 +74,50 @@ def transcribe(
         sample_rate: Audio sample rate (e.g. 16000).
         client:      httpx.Client (or compatible) pre-configured with auth headers.
         model:       Model ID routed through orq (default: openai/whisper-1).
+        language:    ISO-639-1 language code to lock decoding (cuts hallucinated
+                     foreign-language output on silence/noise).
+        prompt:      Priming text passed to Whisper. Steers domain + reduces
+                     "subscribe to my channel" / song-lyric hallucinations.
         url:         Transcription endpoint URL.
 
     Returns:
         Transcribed text string, or "" on empty response.
     """
     wav_bytes = _audio_to_wav_bytes(audio, sample_rate)
+    data: dict[str, str] = {"model": model}
+    if language:
+        data["language"] = language
+    if prompt:
+        data["prompt"] = prompt
     resp = client.post(
         url,
         files={"file": ("speech.wav", wav_bytes, "audio/wav")},
-        data={"model": model},
+        data=data,
     )
     resp.raise_for_status()
-    return resp.json().get("text", "") or ""
+    text = (resp.json().get("text", "") or "").strip()
+    if _looks_like_hallucination(text):
+        log.info("dropping likely Whisper hallucination: %r", text)
+        return ""
+    return text
+
+
+# Common Whisper hallucination patterns observed when given near-silence.
+_HALLUCINATION_PATTERNS = (
+    "♪",
+    "subscribe",
+    "thanks for watching",
+    "thank you for watching",
+    "MBC 뉴스",
+    "字幕",
+    "по материалам",
+    "translation by",
+    "thanks!",
+)
+
+
+def _looks_like_hallucination(text: str) -> bool:
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(p.lower() in lowered for p in _HALLUCINATION_PATTERNS)
