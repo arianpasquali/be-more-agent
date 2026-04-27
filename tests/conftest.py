@@ -22,7 +22,9 @@ def make_settings(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Settings]:
         }
         for k, v in env.items():
             monkeypatch.setenv(k, v)
-        return Settings()
+        # pydantic-settings populates required fields from env at runtime;
+        # pyright cannot verify that, so silence the false-positive.
+        return Settings()  # pyright: ignore[reportCallIssue]
 
     return _factory
 

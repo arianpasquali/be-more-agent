@@ -5,6 +5,10 @@ import threading
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import tkinter as tk
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +37,8 @@ class FacePlayer:
         self._state = FaceState.WARMUP
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        self._tk = None
-        self._label = None
+        self._tk: tk.Tk | None = None
+        self._label: tk.Label | None = None
 
     def set_state(self, state: FaceState) -> None:
         with self._lock:
@@ -51,18 +55,21 @@ class FacePlayer:
 
         from PIL import Image, ImageTk
 
-        self._tk = tk.Tk()
-        self._tk.title("BMO")
-        self._tk.attributes("-fullscreen", True)
-        self._tk.configure(bg="black")
-        self._label = tk.Label(self._tk, bg="black")
-        self._label.pack(expand=True)
+        root = tk.Tk()
+        self._tk = root
+        root.title("BMO")
+        # tkinter stub for .attributes() has an Unknown overload; this is a known stub gap
+        root.attributes("-fullscreen", True)  # pyright: ignore[reportUnknownMemberType]
+        root.configure(bg="black")
+        label = tk.Label(root, bg="black")
+        self._label = label
+        label.pack(expand=True)
 
         cache: dict[Path, ImageTk.PhotoImage] = {}
 
-        def tick(idx: int = 0):
+        def tick(idx: int = 0) -> None:
             if self._stop.is_set():
-                self._tk.destroy()
+                root.destroy()
                 if on_close:
                     on_close()
                 return
@@ -73,11 +80,11 @@ class FacePlayer:
                 f = frames[idx % len(frames)]
                 if f not in cache:
                     cache[f] = ImageTk.PhotoImage(Image.open(f))
-                self._label.config(image=cache[f])
-            self._tk.after(int(1000 / self.fps), tick, idx + 1)
+                label.config(image=cache[f])
+            root.after(int(1000 / self.fps), tick, idx + 1)
 
         tick()
-        self._tk.mainloop()
+        root.mainloop()
 
     def stop(self) -> None:
         self._stop.set()

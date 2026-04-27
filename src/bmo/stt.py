@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import logging
 import wave
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -32,6 +33,18 @@ log = logging.getLogger(__name__)
 ORQ_TRANSCRIPTION_URL = "https://api.orq.ai/v3/router/audio/transcriptions"
 
 __all__ = ["transcribe"]
+
+
+class _HttpClient(Protocol):
+    """Minimal interface satisfied by httpx.Client, requests.Session, or a MagicMock."""
+
+    def post(
+        self,
+        url: str,
+        *,
+        files: dict[str, Any],
+        data: dict[str, str],
+    ) -> Any: ...
 
 
 def _audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
@@ -48,7 +61,7 @@ def _audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
 def transcribe(
     audio: np.ndarray,
     sample_rate: int,
-    client,
+    client: _HttpClient,
     model: str = "openai/whisper-1",
     url: str = ORQ_TRANSCRIPTION_URL,
 ) -> str:

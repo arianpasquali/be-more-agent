@@ -38,4 +38,6 @@ class Settings(BaseSettings):
 
 
 def get_settings() -> Settings:
-    return Settings()
+    # pydantic-settings populates required fields from env / .env file at runtime;
+    # pyright cannot verify that, so we silence the "missing args" false positive.
+    return Settings()  # pyright: ignore[reportCallIssue]

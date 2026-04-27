@@ -6,7 +6,9 @@ import subprocess
 import wave
 
 import numpy as np
-import sounddevice as sd
+
+# sounddevice ships no type stubs; ignore the stub-not-found diagnostic
+import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
 log = logging.getLogger(__name__)
 
@@ -34,11 +36,12 @@ def record_until_silence(
     captured: list[np.ndarray] = []
     silent_run = 0
 
-    with sd.InputStream(
+    with sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
         samplerate=sample_rate, channels=1, device=device, dtype="float32"
     ) as stream:
         for _ in range(max_chunks):
-            data, _ = stream.read(chunk_n)
+            # sounddevice lacks type stubs; stream.read() returns ndarray
+            data, _ = stream.read(chunk_n)  # pyright: ignore[reportUnknownMemberType]
             mono = data[:, 0]
             captured.append(mono.copy())
             silent_run = silent_run + 1 if _rms(mono) < SILENCE_RMS else 0
@@ -53,7 +56,8 @@ def _play_wav_bytes(wav_bytes: bytes) -> None:
         rate = wf.getframerate()
         frames = wf.readframes(wf.getnframes())
         audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    sd.play(audio, samplerate=rate)
+    # sounddevice lacks type stubs; sd.play() signature is partially unknown
+    sd.play(audio, samplerate=rate)  # pyright: ignore[reportUnknownMemberType]
     sd.wait()
 
 

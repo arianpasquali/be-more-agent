@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
-from openwakeword.model import Model
+
+# openwakeword ships no type stubs; ignore the stub-not-found diagnostic
+from openwakeword.model import Model  # pyright: ignore[reportMissingTypeStubs]
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +19,10 @@ class WakeWordDetector:
         self.model = Model(wakeword_models=[model_path])
 
     def detect(self, chunk_int16: np.ndarray) -> bool:
-        scores = self.model.predict(chunk_int16)
+        # openwakeword lacks stubs; predict() returns an untyped dict-like object.
+        # Cast to a plain dict so we can call .values() safely.
+        raw = self.model.predict(chunk_int16)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        scores = cast(dict[str, float], raw)
         if not scores:
             return False
         top = max(scores.values())

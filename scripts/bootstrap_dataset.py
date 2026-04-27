@@ -67,13 +67,17 @@ def find_or_create_dataset(sdk) -> str:
         if name == DATASET_NAME:
             ds_id = getattr(ds, "id", None) or (ds.get("id") if isinstance(ds, dict) else None)
             print(f"Found existing dataset '{DATASET_NAME}' with id={ds_id}")
-            return ds_id
+            if ds_id is None:
+                raise RuntimeError(f"Dataset '{DATASET_NAME}' found but has no id")
+            return str(ds_id)
 
     # Not found — create it
     result = sdk.datasets.create(request={"display_name": DATASET_NAME, "path": DATASET_PATH})
     ds_id = getattr(result, "id", None) or (result.get("id") if isinstance(result, dict) else None)
     print(f"Created dataset '{DATASET_NAME}' with id={ds_id}")
-    return ds_id
+    if ds_id is None:
+        raise RuntimeError(f"Failed to create dataset '{DATASET_NAME}': no id returned")
+    return str(ds_id)
 
 
 def push_datapoints(sdk, dataset_id: str, rows: list) -> None:

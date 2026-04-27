@@ -86,8 +86,9 @@ def run() -> None:
 
     face = FacePlayer(faces_dir="faces")
 
-    def loop():
-        import sounddevice as sd
+    def loop() -> None:
+        # sounddevice ships no type stubs; ignore stub-not-found diagnostic
+        import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
 
         log.info("listening for wakeword...")
         face.set_state(FaceState.IDLE)
@@ -98,7 +99,8 @@ def run() -> None:
             dtype="int16",
         ) as stream:
             while True:
-                data, _ = stream.read(1280)
+                # sounddevice lacks type stubs; stream.read() returns ndarray
+                data, _ = stream.read(1280)  # pyright: ignore[reportUnknownMemberType]
                 if wake.detect(data[:, 0]):
                     log.info("wakeword detected")
                     handle_one_utterance(
