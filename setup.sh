@@ -3,13 +3,16 @@ set -euo pipefail
 
 echo "[bmo-orq] installing system deps…"
 sudo apt update
-sudo apt install -y python3.11-venv python3-pip libportaudio2 portaudio19-dev libatlas-base-dev espeak-ng ffmpeg git
+sudo apt install -y python3.11 python3-pip libportaudio2 portaudio19-dev libatlas-base-dev espeak-ng ffmpeg git curl
 
-echo "[bmo-orq] creating venv…"
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+echo "[bmo-orq] installing uv…"
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+echo "[bmo-orq] syncing deps…"
+uv sync --extra pi
 
 if [ ! -f voices/bmo.onnx ]; then
   echo "[bmo-orq] downloading BMO voice…"
@@ -33,4 +36,4 @@ if [ ! -f .env ]; then
   echo "[bmo-orq] .env created from .env.example — fill in ORQ_API_KEY before running."
 fi
 
-echo "[bmo-orq] done. activate with: source .venv/bin/activate; then: python -m bmo.main"
+echo "[bmo-orq] done. start with: uv run bmo"

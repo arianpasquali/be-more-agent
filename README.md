@@ -1,4 +1,8 @@
-# bmo-orq
+# bmo-orq 🤖
+
+[![ci](https://github.com/arianpasquali/be-more-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/arianpasquali/be-more-agent/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 A conference-booth fork of [be-more-agent](https://github.com/brenpoly/be-more-agent) where the BMO Raspberry Pi is a thin I/O client and the brain runs on [orq.ai](https://orq.ai).
 
@@ -9,15 +13,19 @@ A conference-booth fork of [be-more-agent](https://github.com/brenpoly/be-more-a
 ## Quick start
 
 ```bash
-git clone <this repo>
-cd bmo-orq
+git clone git@github.com:arianpasquali/be-more-agent.git
+cd be-more-agent
+
+# install uv if needed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 cp .env.example .env
 # fill in ORQ_API_KEY (and ORQ_AGENT_KEY if not bmo_demo)
 
-./setup.sh                            # Pi only — installs system deps + Piper
-source .venv/bin/activate
-python scripts/bootstrap_agent.py     # creates/updates the orq agent
-python -m bmo.main                    # runs the listener
+./setup.sh                                    # Pi only — installs system deps + Piper
+uv sync --extra dev                           # local laptop dev
+uv run python scripts/bootstrap_agent.py      # creates/updates the orq agent
+uv run bmo                                    # runs the listener
 ```
 
 ## Architecture
@@ -28,18 +36,25 @@ mic → wakeword → STT → orq Agent ⇄ vision → TTS + face
                   laptop: Claude Code + orq MCP
 ```
 
-See `docs/superpowers/specs/2026-04-27-bmo-orq-design.md` for the full design.
+See [`docs/`](docs/) for the design spec, plan, runbook, and contributing guide.
 
 ## Booth ops
 
-See `docs/booth-runbook.md` and `docs/visitor-cards.md`.
+See [`docs/booth-runbook.md`](docs/booth-runbook.md) and [`docs/visitor-cards.md`](docs/visitor-cards.md).
 
 ## Development
 
 ```bash
-pytest                                # unit suite
-RUN_LIVE=1 pytest tests/test_live_agent.py  # live orq integration
+uv sync --extra dev
+uv run pre-commit install
+uv run pytest                         # unit suite
+uv run pytest -m live                 # live orq integration
+uv run ruff format src tests scripts  # format
+uv run ruff check src tests scripts   # lint
+uv run pyright                        # types
 ```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Out of scope (v1)
 
