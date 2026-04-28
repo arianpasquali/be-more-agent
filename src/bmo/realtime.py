@@ -228,9 +228,13 @@ async def _session_loop(
         # to cover paplay's --latency-msec buffer + BT sink jitter.
         playback_tail_padding_s = 0.4
 
+        # Serialize shadow calls — orq agent rejects concurrent invokes on
+        # the same task_id with HTTP 400 "Agent execution is in progress".
+        shadow_lock = asyncio.Lock()
+
         async def _shadow_log(user_text: str, bmo_text: str) -> None:
             """Send the turn through the orq agent so it shows up in Traces.
-            We discard the agent's reply; this is a fire-and-forget sidecar.
+            Each call resets the shadow thread → fresh trace per turn.
             """
             if not user_text and not bmo_text:
                 return
@@ -240,10 +244,12 @@ async def _session_loop(
                 f"BMO replied: {bmo_text}\n"
                 f"Acknowledge briefly."
             )
-            try:
-                await asyncio.to_thread(shadow_orq.invoke, payload)
-            except Exception:
-                log.exception("shadow trace log failed")
+            async with shadow_lock:
+                try:
+                    shadow_orq.reset_thread()
+                    await asyncio.to_thread(shadow_orq.invoke, payload)
+                except Exception:
+                    log.exception("shadow trace log failed")
 
         async def pump_events() -> None:
             nonlocal turn_count
